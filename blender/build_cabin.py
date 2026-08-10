@@ -125,6 +125,10 @@ class BuildContext:
     volume: "np.ndarray"
     materials: dict = field(default_factory=dict)
     world_object: object = None
+    #: Filename prefix for renders. Read by the REUSED `city.render._output_path`,
+    #: which otherwise defaults to "city" and would drop cabin frames on top of
+    #: the city's in the shared renders/ directory.
+    output_prefix: str = "cabin"
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:

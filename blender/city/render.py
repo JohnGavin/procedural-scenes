@@ -386,9 +386,18 @@ def configure(ctx) -> None:
 
 
 def _output_path(ctx, suffix: str = "") -> Path:
+    """Output filename for this render.
+
+    The prefix is read off the context rather than hardcoded to "city_". This
+    module is shared: `build_cabin.py` reuses it wholesale, and with a fixed
+    prefix the cabin renders silently overwrote the city's `city_dusk.png` and
+    `city_night.png` — same directory, same names, no warning. Defaults to
+    "city" so the original pipeline is unchanged.
+    """
     out_dir = Path(ctx.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    return out_dir / f"city_{ctx.preset_name}{suffix}.png"
+    prefix = getattr(ctx, "output_prefix", "city")
+    return out_dir / f"{prefix}_{ctx.preset_name}{suffix}.png"
 
 
 def render(ctx) -> Path:
