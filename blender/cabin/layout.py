@@ -270,8 +270,12 @@ PRESETS: dict[str, dict] = {
         "fog_density": 0.02,
         "campfire_strength": 8.0,
         "window_light_strength": 4.0,
-        "camera_position": (66.0, 24.0, 15.0),
-        "camera_target": (45.5, 44.5, 11.0),
+        # ~59 units out and raised, not ~29. At the original distance a 35mm
+        # lens filled the frame with one cabin wall; the brief wants the cabin
+        # IN a valley — river behind, forest around it — so the shot needs to
+        # see most of the 96-block world, not a close-up of the timber.
+        "camera_position": (88.0, 8.0, 36.0),
+        "camera_target": (45.5, 44.5, 12.0),
         "camera_focal_length_mm": 35.0,
         "dof_enabled": True,
         "dof_fstop": 2.0,
@@ -288,10 +292,17 @@ PRESETS: dict[str, dict] = {
         "sky_dust_density": 0.6,
         "sky_ozone_density": 1.0,
         "fog_density": 0.03,
-        "campfire_strength": 10.0,
-        "window_light_strength": 6.0,
-        "camera_position": (60.0, 20.0, 13.0),
-        "camera_target": (45.5, 44.5, 10.0),
+        # Raised hard from 10/6. At those values the render was a black frame
+        # with four lit rectangles floating in it — the emitters were visible
+        # but lit nothing around them, so the cabin had no form at all. The
+        # point of the night preset is that these ARE the light, so they have
+        # to be strong enough to actually model the walls and ground.
+        "campfire_strength": 55.0,
+        "window_light_strength": 30.0,
+        # Closer than dusk — at night the lit windows and fire are the subject,
+        # and the surrounding valley is invisible anyway.
+        "camera_position": (74.0, 16.0, 22.0),
+        "camera_target": (45.5, 44.5, 11.0),
         "camera_focal_length_mm": 35.0,
         "dof_enabled": False,
         "dof_fstop": 4.0,
@@ -310,9 +321,10 @@ PRESETS: dict[str, dict] = {
         "fog_density": 0.01,
         "campfire_strength": 6.0,
         "window_light_strength": 2.0,  # daylight — less contrast needed
-        "camera_position": (70.0, 30.0, 18.0),
-        "camera_target": (45.5, 44.5, 12.0),
-        "camera_focal_length_mm": 40.0,
+        # Widest of the four: snow is a landscape look, so show the whole valley.
+        "camera_position": (96.0, 2.0, 38.0),
+        "camera_target": (44.0, 46.0, 12.0),
+        "camera_focal_length_mm": 32.0,
         "dof_enabled": True,
         "dof_fstop": 4.0,
         "dof_focus_distance": None,
