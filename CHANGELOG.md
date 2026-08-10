@@ -1,5 +1,74 @@
 # Changelog
 
+## 2026-08-10 (later) — Blender rebuild
+
+### Completed
+
+- **Installed Blender 5.2.0 LTS via Nix.** Verified before starting that
+  `meta.platforms` includes `aarch64-darwin`, `broken = false`, and that the
+  whole closure substitutes from `cache.nixos.org` — 189 paths, 851 MiB
+  download, 2.88 GiB unpacked, **nothing compiled**.
+- **Cycles Metal GPU confirmed working**: `DEVICE_TYPES ['NONE', 'METAL']`,
+  `Apple M2 Max (GPU - 38 cores)`. This was the open risk — nixpkgs could
+  plausibly have shipped Cycles CPU-only on Darwin. It did not.
+- **Pinned the Nix environment** (`shell.nix` + a GC root at
+  `.nix-gcroot-blender`) so the closure cannot be re-downloaded or collected.
+- **Rebuilt the city in Blender**: 7 modules, ~2,900 lines, against a frozen
+  `layout.py` contract shared with `buildings.html`. Four presets — `noon`,
+  `dusk`, `night`, `tiltshift` — all rendering in 2.8–3.9 s at 960×540 / 96
+  samples on the GPU.
+- Written in parallel by four agents in separate git worktrees on disjoint
+  files, then integrated and debugged centrally.
+- `docs/BLENDER.md` — run instructions, feature-by-feature comparison against
+  the three.js version, and the 5.x API notes.
+
+### Failed Approaches
+
+- **Dispatching the four parallel agents before Blender finished downloading.**
+  All four stalled waiting on a binary that did not exist yet; two tripped a
+  600 s no-progress watchdog while sleeping in the poll loop they had been told
+  to use. No work was lost (all seven modules survived in their worktrees) but
+  the wall-clock cost was real. Sequence the dependency next time, or dispatch
+  with work that does not need the tool.
+- **A World volume for the atmosphere.** Renders pure black: an unbounded
+  medium gives every sky-bound ray infinite optical depth. Measured 0.00033
+  mean pixel vs 0.968 without. Replaced with a bounded domain object.
+- **A scene `compositing_node_group` sourced from `NodeGroupInput`.** Also
+  renders pure black with zero alpha — Blender never feeds that input. Must
+  source from a Render Layers node. Applies even with `use_compositing = False`.
+- **Pinning `shell.nix` to the nixpkgs registry tarball.** Looked correct, but
+  evaluated Blender to a *different* store path than the one already built, so
+  entering the shell would have silently re-downloaded 851 MiB. `<nixpkgs>` on
+  this machine resolves to a flakehub weekly tree. Caught only by checking that
+  the pin resolved to the same store path.
+- **Trusting `bl_rna` enum introspection.** `view_transform`, `look` and
+  `compute_device_type` are dynamic enums that report `['NONE']` while
+  assignment works. Gating on that list had stranded the render on CPU and on
+  the default view transform.
+
+### Accuracy / Metrics
+
+- `tower_plots(7)` → 84 plots → 121 building objects; z-range 1.2–83.6, bases
+  exactly on `Y.kerb_top`.
+- Geometry Nodes park scatter → **167 instances**, verified via the evaluated
+  depsgraph (a count of 0 is the classic silent mis-wiring, so it was asserted
+  rather than eyeballed).
+- All four presets verified non-blank by sampling mean pixel values, not by
+  checking that the file exists — an early "success" was a 50 KB PNG that was
+  entirely transparent.
+- `nix-build shell.nix --dry-run` → 16 paths / 2.62 MiB, Blender absent.
+
+### Known Limitations
+
+- The two cities are not identical building-for-building: `layout.py` uses
+  `random.Random` rather than reimplementing the JS `mulberry32` stream.
+- Window emission covers tall towers only; fringe blocks stay dark at `night`.
+- Turntable animation is implemented but has never been run to completion.
+- Glare/bloom is wired but untuned per preset.
+- The four agents' own verification suites never ran — the modules were
+  verified centrally at integration instead, which caught real bugs but is
+  less thorough per-module than what was specified.
+
 ## 2026-08-10
 
 ### Completed
