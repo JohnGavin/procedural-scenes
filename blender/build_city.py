@@ -110,6 +110,16 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         metavar="PATH",
         help="Optional path to save the built scene as a .blend file.",
     )
+    parser.add_argument(
+        "--export-gltf",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Export the built scene to glTF (.glb) for interactive viewing in "
+            "the browser. Realises Geometry Nodes instances into real meshes."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -191,10 +201,70 @@ def main(argv: list[str] | None = None) -> None:
         bpy.ops.wm.save_as_mainfile(filepath=str(args.save_blend))
         logger.info("saved .blend: %s", args.save_blend)
 
+    if args.export_gltf is not None:
+        _export_gltf(args.export_gltf)
+
     if not args.no_render:
         _run_stage("render.render", render.render, ctx)
     else:
         logger.info("--no-render: skipping render.render")
+
+
+def _export_gltf(path: Path) -> None:
+    """Export the built scene to a single .glb for interactive browser viewing.
+
+    This is the bridge back to the three.js side of the project: Cycles gives
+    light transport a rasteriser cannot, but it gives up interactivity to do it.
+    Exporting to glTF hands the Blender-authored geometry and materials back to
+    a real-time viewer, so the city can be orbited and zoomed again.
+
+    What survives the trip: geometry, PBR base colour / metallic / roughness,
+    emission (so the night windows still glow), and object hierarchy. What does
+    not: the volumetric atmosphere, true glass refraction, and every bounce of
+    global illumination — those are properties of the renderer, not the scene.
+
+    Geometry Nodes instances are realised into real meshes on the way out
+    (`export_apply=True` evaluates modifiers), which is why the exported tree
+    count matches what Cycles renders rather than coming out empty.
+    """
+    import bpy
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    # The atmosphere domain is a Cycles-only construct — a box with no surface
+    # shader. In a rasteriser it would export as a giant opaque cube wrapped
+    # around the whole city, hiding everything. Pull it out for the export.
+    atmosphere = bpy.data.objects.get("CityAtmosphere")
+    hidden = False
+    if atmosphere is not None:
+        atmosphere.hide_viewport = True
+        atmosphere.hide_render = True
+        hidden = True
+
+    try:
+        bpy.ops.export_scene.gltf(
+            filepath=str(path),
+            export_format="GLB",
+            export_apply=True,          # evaluate modifiers
+            # `export_apply` alone evaluates the Geometry Nodes modifier but
+            # leaves its output as *instances*, which the exporter then drops —
+            # the park came out with zero trees while still reporting success.
+            # `export_gn_mesh` realises that instanced geometry into real
+            # meshes. Checked by counting vertices in the .glb, not by trusting
+            # the exit code.
+            export_gn_mesh=True,
+            use_visible=True,           # honours the hide above
+            export_cameras=True,
+            export_lights=True,
+            export_yup=True,            # glTF is Y-up; Blender is Z-up
+        )
+    finally:
+        if hidden and atmosphere is not None:
+            atmosphere.hide_viewport = False
+            atmosphere.hide_render = False
+
+    size = path.stat().st_size if path.exists() else 0
+    logger.info("exported glTF: %s (%.1f MB)", path, size / 1e6)
 
 
 if __name__ == "__main__":
