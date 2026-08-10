@@ -453,6 +453,13 @@ def build_materials(ctx) -> None:
     ctx.materials["gravel"] = _simple_principled_material(
         "City_Gravel", _hex_to_linear(0xA89A80), roughness=0.9, roughness_var=0.08, noise_scale=50.0
     )
+    # The 1600-unit base plane, distinct from `park_grass`. buildings.html uses
+    # a muted olive (0x6F7758) here and the far brighter 0x4A7A3C only inside
+    # the park. Reusing park_grass for both turned the whole horizon into a
+    # saturated green field and flattened the park's contrast against it.
+    ctx.materials["ground"] = _simple_principled_material(
+        "City_Ground", _hex_to_linear(0x6F7758), roughness=1.0, roughness_var=0.04, noise_scale=25.0
+    )
 
     strength = ctx.preset["window_emission_strength"] if ctx.preset["window_emission"] else 0.0
     ctx.materials["window_emission"] = _window_emission_material(

@@ -239,7 +239,7 @@ def _ground(ctx, collection: bpy.types.Collection) -> None:
     # No dedicated "ground" key in the materials contract (see materials.py's
     # docstring) -- park_grass is the closest available tone to buildings.html's
     # olive-green 0x6f7758 base, so we reuse it rather than invent a new key.
-    mat = _material(ctx, "park_grass", note=" (reusing for base ground -- no dedicated key)")
+    mat = _material(ctx, "ground")
     _new_object("ground", verts, faces, collection, material=mat)
 
 

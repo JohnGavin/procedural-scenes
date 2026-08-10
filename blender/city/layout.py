@@ -303,12 +303,16 @@ PRESETS: dict[str, dict] = {
     },
     "dusk": {
         # Low, warm sun; longer shadows; haze picks up more colour.
-        "sun_elevation_rad": 0.1745,  # 10 deg
+        # 4 deg, not 10: at 10 the multiple-scattering sky still reads as
+        # ordinary daylight, and dusk was near-indistinguishable from noon.
+        # Below ~5 deg the sun's path through the atmosphere is long enough
+        # for Rayleigh scattering to actually strip the blue and go warm.
+        "sun_elevation_rad": 0.0698,  # 4 deg
         "sun_rotation_rad": 2.2340,
-        "sun_strength": 1.8,
-        "sky_air_density": 1.4,
-        "sky_dust_density": 2.2,
-        "sky_ozone_density": 1.6,
+        "sun_strength": 4.5,  # low sun loses much of its energy to the atmosphere
+        "sky_air_density": 1.8,
+        "sky_dust_density": 3.0,  # more Mie scattering = warmer, hazier horizon
+        "sky_ozone_density": 2.4,
         "volumetric_density": 0.014,
         "window_emission": True,
         "window_emission_strength": 3.0,
@@ -354,12 +358,19 @@ PRESETS: dict[str, dict] = {
         "volumetric_density": 0.006,
         "window_emission": False,
         "window_emission_strength": 0.0,
-        "camera_position": (140.0, 220.0, 160.0),  # steep, near-overhead angle
-        "camera_target": (0.0, 0.0, 0.0),
-        "camera_focal_length_mm": 100.0,
+        # Pulled back and up. At (140, 220, 160) with a 100mm lens the camera
+        # sat ~300 units out with a ~20 deg field of view — a telephoto crop of
+        # four towers, not a diorama. The miniature illusion needs the WHOLE
+        # subject small in frame with a shallow plane across it, so: further
+        # out, steeper down, and a lens long enough to compress without cropping.
+        "camera_position": (330.0, 430.0, 360.0),
+        "camera_target": (0.0, 10.0, 0.0),
+        "camera_focal_length_mm": 85.0,
         "dof_enabled": True,
         "dof_fstop": 1.4,
-        "dof_focus_distance": 260.0,  # explicit — the miniature effect needs a tight plane
+        # Explicit, and it must match the new camera-to-target distance
+        # (~640 units) or the focus plane sits in empty air in front of the city.
+        "dof_focus_distance": 640.0,
         "samples": 320,
         "resolution": (1920, 1080),
     },
