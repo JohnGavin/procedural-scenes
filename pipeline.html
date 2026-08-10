@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build pipeline — Blender city</title>
+<style>
+  :root {
+    --bg:#f7f7f5; --panel:#fff; --ink:#1b2028; --muted:#5c6470; --rule:#dcdcd6;
+    --env:#7a5cc4; --code:#2f6f9f; --data:#8a6d1f; --stage:#2f6f4f; --out:#a4552a; --view:#1b7f86;
+    --edge:#9aa3ae; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#0f1216; --panel:#171b21; --ink:#e8e9ea; --muted:#9aa3ae; --rule:#2a3039;
+      --env:#b49ae8; --code:#7cc0ea; --data:#e0c168; --stage:#7fd0a3; --out:#f0a06a; --view:#6fd6dc;
+      --edge:#5b6572;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0f1216; --panel:#171b21; --ink:#e8e9ea; --muted:#9aa3ae; --rule:#2a3039;
+    --env:#b49ae8; --code:#7cc0ea; --data:#e0c168; --stage:#7fd0a3; --out:#f0a06a; --view:#6fd6dc;
+    --edge:#5b6572;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width:1240px; margin:0 auto; padding:2.5rem 1.25rem 5rem; }
+  h1 { font-size:clamp(1.4rem,3.5vw,2rem); margin:0 0 .4rem; letter-spacing:-.02em; }
+  .sub { color:var(--muted); margin:0 0 1.25rem; max-width:70ch; }
+  .hint {
+    display:inline-block; font-size:.85rem; color:var(--muted);
+    border:1px dashed var(--rule); border-radius:6px; padding:.4rem .65rem; margin-bottom:1.25rem;
+  }
+  .legend { display:flex; flex-wrap:wrap; gap:.5rem 1rem; margin:0 0 1.5rem; font-size:.82rem; color:var(--muted); }
+  .legend span { display:inline-flex; align-items:center; gap:.4rem; }
+  .sw { width:11px; height:11px; border-radius:3px; display:inline-block; }
+
+  .board { overflow-x:auto; border:1px solid var(--rule); border-radius:12px; background:var(--panel); }
+  svg { display:block; min-width:1060px; }
+
+  .node rect { fill:var(--panel); stroke-width:1.6; rx:9; transition:filter .12s, stroke-width .12s; }
+  .node .lab { font:600 13.5px var(--mono); fill:var(--ink); }
+  .node .sub2 { font:11px var(--mono); fill:var(--muted); }
+  .node { cursor:help; outline:none; }
+  .node:hover rect, .node:focus-visible rect { stroke-width:3; filter:brightness(1.06); }
+  .node:focus-visible rect { stroke-dasharray:4 2; }
+
+  .edge { fill:none; stroke:var(--edge); stroke-width:1.7; marker-end:url(#arrow); }
+  .edge.dash { stroke-dasharray:5 4; }
+  .hit { fill:none; stroke:transparent; stroke-width:20; cursor:help; }
+  .hit:hover + .edge, .hit:focus-visible + .edge { stroke:var(--ink); stroke-width:3; }
+  .elab { font:10.5px var(--mono); fill:var(--muted); }
+
+  #tip {
+    position:fixed; z-index:50; max-width:360px; pointer-events:none; opacity:0;
+    transition:opacity .1s; background:var(--panel); color:var(--ink);
+    border:1px solid var(--rule); border-radius:9px; padding:.7rem .8rem;
+    box-shadow:0 8px 28px rgba(0,0,0,.28); font-size:.86rem; line-height:1.5;
+  }
+  #tip.on { opacity:1; }
+  #tip h3 { margin:0 0 .3rem; font:600 12px var(--mono); letter-spacing:.02em; }
+  #tip p { margin:0; color:var(--muted); }
+  #tip .kind { font:10px var(--mono); text-transform:uppercase; letter-spacing:.08em; opacity:.75; }
+
+  .node.has-src { cursor:pointer; }
+  .node .srctag { font:11px var(--mono); fill:var(--muted); opacity:.55; }
+  .node.has-src:hover .srctag, .node.has-src:focus-visible .srctag { opacity:1; fill:var(--ink); }
+
+  #panel {
+    position:fixed; inset:0; z-index:60; display:none;
+    background:rgba(10,12,15,.55); padding:3vh 1rem;
+  }
+  #panel.on { display:flex; justify-content:center; align-items:flex-start; }
+  .sheet {
+    background:var(--panel); border:1px solid var(--rule); border-radius:12px;
+    width:min(980px,100%); max-height:94vh; display:flex; flex-direction:column;
+    box-shadow:0 24px 60px rgba(0,0,0,.4); overflow:hidden;
+  }
+  .sheet header {
+    display:flex; align-items:center; gap:.75rem;
+    padding:.7rem .9rem; border-bottom:1px solid var(--rule); flex:none;
+  }
+  .sheet header code { font:12.5px var(--mono); color:var(--code); }
+  .sheet header .spacer { flex:1; }
+  .sheet header a { font-size:.8rem; color:var(--muted); text-decoration:none; }
+  .sheet header a:hover { color:var(--ink); text-decoration:underline; }
+  #p-close {
+    font:inherit; border:1px solid var(--rule); background:transparent; color:var(--ink);
+    border-radius:5px; padding:.2rem .5rem; cursor:pointer; line-height:1;
+  }
+  #p-close:hover { border-color:var(--muted); }
+  #p-note:not(:empty) {
+    padding:.6rem .9rem; font-size:.82rem; color:var(--muted);
+    border-bottom:1px solid var(--rule); background:rgba(127,127,127,.06);
+  }
+  #p-note code { font:11.5px var(--mono); color:var(--out); }
+  #p-code { margin:0; padding:.6rem 0 1rem; overflow:auto; flex:1; }
+  #p-code .row { display:flex; font:12.5px/1.55 var(--mono); white-space:pre; }
+  #p-code .ln { color:var(--muted); opacity:.6; padding:0 .9rem 0 .6rem; user-select:none; flex:none; }
+  #p-code .src { flex:1; padding-right:1rem; }
+  #p-code .row.hit { background:rgba(127,180,140,.18); }
+  #p-code .row.hit .ln { opacity:1; color:var(--stage); font-weight:600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>How the city gets built</h1>
+  <p class="sub">
+    Every step from a pinned Nix environment to the images and the interactive
+    scene. Stages run in a fixed order and each is wrapped so a failure names the
+    stage that broke.
+  </p>
+  <div class="hint">
+    <b>Hover</b> any box or arrow for an explanation, including what goes wrong there.
+    <b>Click</b> a box marked <span style="font-family:var(--mono)">‹›</span> to read the code behind it.
+    Keyboard: <span style="font-family:var(--mono)">Tab</span> to move, <span style="font-family:var(--mono)">Enter</span> to open, <span style="font-family:var(--mono)">Esc</span> to close.
+  </div>
+
+  <div class="legend">
+    <span><i class="sw" style="background:var(--env)"></i>environment</span>
+    <span><i class="sw" style="background:var(--code)"></i>entry / contract</span>
+    <span><i class="sw" style="background:var(--stage)"></i>build stage</span>
+    <span><i class="sw" style="background:var(--data)"></i>data produced</span>
+    <span><i class="sw" style="background:var(--out)"></i>output file</span>
+    <span><i class="sw" style="background:var(--view)"></i>how you view it</span>
+  </div>
+
+  <div class="board"><svg id="svg" role="img" aria-label="Build pipeline diagram"></svg></div>
+</div>
+
+<div id="tip" role="tooltip"><span class="kind"></span><h3></h3><p></p></div>
+
+<div id="panel" aria-hidden="true">
+  <div class="sheet" role="dialog" aria-label="Source code">
+    <header>
+      <code id="p-path"></code>
+      <span class="spacer"></span>
+      <a id="p-raw" href="#" target="_blank" rel="noopener">open raw ↗</a>
+      <button id="p-close" aria-label="Close">✕</button>
+    </header>
+    <div id="p-note"></div>
+    <pre id="p-code"></pre>
+  </div>
+</div>
+
+<script>
+const N = [
+  // ---- environment -------------------------------------------------------
+  {id:'shell', x:40, y:36, w:250, h:70, kind:'env', lab:'shell.nix', sub:'pinned nixpkgs',
+   t:'The lock', d:'Pins nixpkgs by revision and hash to the flakehub weekly tree. Resolves to exactly the Blender already in the local store, so entering the shell fetches 2.62 MiB of stdenv tooling and no Blender. An earlier pin to the nixpkgs registry tarball looked right but resolved to a different store path — it would have re-downloaded 851 MiB.'},
+  {id:'gc', x:40, y:140, w:250, h:64, kind:'env', lab:'.nix-gcroot-blender', sub:'GC root (gitignored)',
+   d:'A symlink into /nix/store that stops nix-collect-garbage deleting the 851 MiB closure. Matters because this machine runs at ~35 GB free and garbage collection is a live reclaim option. Recreate with: nix-build shell.nix -A blender -o .nix-gcroot-blender', t:'Garbage-collection root'},
+  {id:'blender', x:380, y:36, w:250, h:70, kind:'env', lab:'Blender 5.2.0 LTS', sub:'851 MiB closure, 0 built',
+   t:'The renderer', d:'Installed entirely from cache.nixos.org — 189 paths fetched, nothing compiled. Ships Cycles, OpenImageDenoise, OpenVDB and the glTF exporter. Several APIs moved in 5.x; five of them broke this build and each was found by probing the runtime rather than guessing.'},
+  {id:'gpu', x:720, y:36, w:280, h:70, kind:'env', lab:'Cycles · METAL', sub:'Apple M2 Max, 38 GPU cores',
+   t:'GPU path tracing', d:'The main open risk of the whole exercise: nixpkgs could plausibly have compiled Cycles CPU-only on Darwin. It did not. Detected at runtime — DEVICE_TYPES reports [NONE, METAL] — with a clean CPU fallback. This is why a frame takes 4-6 s instead of minutes.'},
+
+  // ---- entry + contract ---------------------------------------------------
+  {id:'cli', x:40, y:262, w:250, h:76, kind:'code', lab:'CLI arguments', sub:'--preset --seed --samples',
+   t:'Command line', d:'Parsed from after the "--" separator, because everything before it belongs to Blender itself. --preset picks one of four looks, --seed redraws the city under the same rules, --no-render builds the scene and stops (a fast structural check that needs no rendering).'},
+  {id:'entry', x:380, y:262, w:250, h:76, kind:'code', lab:'build_city.py', sub:'entrypoint · stage order · ctx',
+   t:'Orchestrator', d:'Clears the default scene, builds the ctx object every stage receives, then runs the seven stages in a fixed order. Each stage is wrapped so an exception names the stage that failed — which is how the black-frame bugs were localised instead of guessed at.'},
+  {id:'layout', x:720, y:262, w:280, h:76, kind:'code', lab:'city/layout.py', sub:'the frozen contract',
+   t:'Single source of truth', d:'Constants ported from buildings.html, tower_plots() resolving all 84 building footprints, and the 17-key preset schema. Imports no bpy, so it runs under plain python3 and can be diffed against the three.js constants. Frozen so four agents could build against it in parallel without colliding.'},
+
+  // ---- stages -------------------------------------------------------------
+  {id:'mat',   x:380, y:400, w:250, h:66, kind:'stage', lab:'1 · materials', sub:'13 procedural node graphs',
+   t:'Materials', d:'Every surface is a node graph — no image files anywhere. Glass is a real Principled BSDF with transmission and noise-driven roughness variation. The lane markings, which the three.js version had to paint into a canvas and tile, are procedural here.'},
+  {id:'terr',  x:380, y:486, w:250, h:66, kind:'stage', lab:'2 · terrain', sub:'river · park · streets · bridges',
+   t:'Terrain', d:'Ground plane, the meandering river sampled along its sine centreline, the park ellipse and pond, the street grid with kerbed blocks, and two bridges placed at river_centre(z) for each arterial crossing.'},
+  {id:'bld',   x:380, y:572, w:250, h:66, kind:'stage', lab:'3 · buildings', sub:'84 plots → 121 objects',
+   t:'Towers', d:'Podium / shaft / crown for anything over 30 units, plus masts and rooftop plant. Shafts share one unit mesh and differ by scale — Blender’s equivalent of an InstancedMesh. Window grids are procedural and driven from world-space position, so a window cell stays the same real size on a 12-unit block and an 80-unit tower.'},
+  {id:'scat',  x:380, y:658, w:250, h:66, kind:'stage', lab:'4 · scatter', sub:'Geometry Nodes',
+   t:'Procedural scatter', d:'The three.js version hand-places 110 trees in a loop. This is a Geometry Nodes graph: distribute points on the lawn, mask out the pond, randomise rotation and scale, pick between conifer and broadleaf. Change the seed or density and the whole park repopulates with no re-authoring.'},
+  {id:'light', x:380, y:744, w:250, h:66, kind:'stage', lab:'5 · lighting', sub:'sky · sun · atmosphere',
+   t:'Lighting', d:'Physically-based sky whose sun elevation drives the actual light, a sun lamp kept in agreement with it, and a bounded volumetric atmosphere. In 5.x the NISHITA sky type no longer exists — it split into SINGLE_SCATTERING and MULTIPLE_SCATTERING, and dust_density became aerosol_density.'},
+  {id:'cam',   x:380, y:830, w:250, h:66, kind:'stage', lab:'6 · camera', sub:'framing · depth of field',
+   t:'Camera', d:'Positioned and aimed from the preset, with depth of field from a real f-stop. The focus distance must match the camera-to-target distance or the plane sits in empty air — the original tilt-shift preset focused at 260 with the city at 640.'},
+  {id:'conf',  x:380, y:916, w:250, h:66, kind:'stage', lab:'7 · render.configure', sub:'device · samples · compositor',
+   t:'Render settings', d:'Detects the compute backend, sets samples and resolution, enables adaptive sampling and OpenImageDenoise, picks the AgX view transform and wires the glare compositor. Dynamic enums here report [NONE] under static introspection while assigning fine — gating on that list had silently stranded the render on CPU.'},
+
+  // ---- side data ----------------------------------------------------------
+  {id:'plots', x:720, y:572, w:280, h:66, kind:'data', lab:'84 plots', sub:'x z w d h is_glass seed',
+   t:'Resolved footprints', d:'tower_plots(seed) does all the layout maths once — block indices, core/fringe decay, single-vs-split, vacant lots, height formula. Buildings just reads the records. Verified: z-range 1.2 to 83.6, every base exactly on the kerb top.'},
+  {id:'inst',  x:720, y:658, w:280, h:66, kind:'data', lab:'167 instances', sub:'asserted via depsgraph',
+   t:'Scatter output', d:'A mis-wired Geometry Nodes graph fails silently and yields nothing, so this was asserted by evaluating the depsgraph and counting instances rather than by checking the script exited cleanly. A count of zero is the classic failure here.'},
+  {id:'atmo',  x:720, y:744, w:280, h:66, kind:'data', lab:'bounded domain', sub:'not a World volume',
+   t:'Atmosphere box', d:'A World volume is unbounded: every sky-bound ray accumulates infinite optical depth and extinguishes, rendering pure black. Measured 0.00033 mean pixel against 0.968 without it. No density is small enough to fix that, so the medium lives in a box sized to the scene.'},
+  {id:'dev',   x:720, y:916, w:280, h:66, kind:'data', lab:'device = GPU', sub:'METAL, 38 cores',
+   t:'Chosen device', d:'Reported at runtime, with the available backends and device names logged. Falls back to CPU cleanly. On CPU the same frame takes minutes rather than seconds, so the feature set survives but the turnaround does not.'},
+
+  // ---- outputs ------------------------------------------------------------
+  {id:'ready', x:380, y:1030, w:250, h:60, kind:'stage', lab:'scene complete', sub:'three ways out',
+   t:'Built scene', d:'At this point the scene exists in memory with all geometry, materials, lighting and camera. What happens next is a branch: render it, export it, or save it.'},
+
+  {id:'still', x:40,  y:1140, w:250, h:66, kind:'stage', lab:'render.render()', sub:'Cycles path trace',
+   t:'Render a still', d:'Path traces the frame on the GPU and writes a PNG. 4-6 s at 1280x720 with 96 samples, which is only usable because OpenImageDenoise cleans up the remaining noise.'},
+  {id:'gltf',  x:380, y:1140, w:250, h:66, kind:'stage', lab:'--export-gltf', sub:'realise + export',
+   t:'Export to glTF', d:'Hands the geometry and materials back to a real-time renderer. export_apply alone silently exports zero trees — it evaluates the Geometry Nodes modifier but leaves the output as instances, which the exporter drops. export_gn_mesh realises them; verified by counting nodes in the .glb, 192 to 359.'},
+  {id:'blend', x:720, y:1140, w:280, h:66, kind:'stage', lab:'--save-blend', sub:'the scene itself',
+   t:'Save a .blend', d:'Writes the whole scene to a Blender file. This is the one route that gives interactivity and path tracing at the same time.'},
+
+  {id:'png',  x:40,  y:1252, w:250, h:60, kind:'out', lab:'renders/*.png', sub:'four presets',
+   t:'The stills', d:'noon, dusk, night and tiltshift. Verified non-blank by sampling mean pixel values, not by checking the file exists — an early "success" was a 50 KB PNG that was entirely transparent.'},
+  {id:'glb',  x:380, y:1252, w:250, h:60, kind:'out', lab:'renders/*.glb', sub:'~0.2 MB each',
+   t:'The exported scene', d:'359 nodes: 121 towers, 167 trees, terrain and bridges, with PBR and emissive materials. Small because the city is box geometry with procedural shading rather than textured meshes.'},
+  {id:'bfile',x:720, y:1252, w:280, h:60, kind:'out', lab:'renders/city.blend', sub:'full scene',
+   t:'The Blender file', d:'Everything the pipeline built, openable in the GUI.'},
+
+  {id:'gal',  x:40,  y:1364, w:250, h:66, kind:'view', lab:'gallery.html', sub:'the four stills',
+   t:'Still gallery', d:'The four presets with captions on what each demonstrates. This is where the light transport is actually visible — GI, real glass, volumetrics and windows that light the city.'},
+  {id:'view', x:380, y:1364, w:250, h:66, kind:'view', lab:'blender_city.html', sub:'orbit · zoom · pan',
+   t:'Interactive viewer', d:'three.js loading the exported scene, with a day/night switch. You get interactivity back and lose the light transport: emissive windows glow but illuminate nothing. Needs an HTTP server — Chromium browsers block the .glb fetch over file://.'},
+  {id:'gui',  x:720, y:1364, w:280, h:66, kind:'view', lab:'Blender GUI', sub:'interactive path tracing',
+   t:'The best of both', d:'Open the .blend and set the viewport to Rendered. Orbit and zoom with Cycles re-converging live on the 38-core GPU — the only route that is interactive and path traced at once.'},
+];
+
+const E = [
+  {a:'shell', b:'blender', l:'provides', t:'nix-shell', d:'Entering the shell puts this exact Blender on PATH. Because the pin resolves to the store path already present, nothing downloads.'},
+  {a:'gc', b:'shell', dash:true, l:'protects', t:'Keeps the closure alive', d:'Not a build step — a safety line. Without it a nix-collect-garbage would delete Blender and the next shell entry would re-fetch 851 MiB.'},
+  {a:'blender', b:'gpu', l:'detects', t:'Runtime device query', d:'The available backends are read from the Cycles addon preferences at run time, never assumed. Static introspection of that enum returns nothing useful.'},
+  {a:'cli', b:'entry', l:'args', t:'Parsed options', d:'Resolved into a single preset dict, so every downstream stage reads values from one place rather than re-parsing flags.'},
+  {a:'layout', b:'entry', l:'contract', t:'Constants and presets', d:'The entrypoint imports the contract and calls tower_plots() once. Everything downstream consumes the result; no stage re-derives layout maths.'},
+  {a:'entry', b:'mat', l:'stage 1', t:'First stage', d:'Materials run first because every later stage reads finished materials from the registry by name rather than creating its own.'},
+  {a:'mat', b:'terr', t:'Order matters', d:'Terrain reads asphalt, water, kerb, gravel and ground from the registry the previous stage populated.'},
+  {a:'terr', b:'bld', t:'Ground before towers', d:'Towers sit on the kerbed block platforms terrain builds, at a height the contract fixes.'},
+  {a:'bld', b:'scat', t:'City before planting', d:'Scatter distributes onto the park lawn, so that surface has to exist first.'},
+  {a:'scat', b:'light', t:'Geometry before light', d:'Lighting sizes its atmosphere box around the finished scene.'},
+  {a:'light', b:'cam', t:'Light before camera', d:'Camera framing and depth of field are independent of lighting, but both read the same preset, so order here is convention rather than dependency.'},
+  {a:'cam', b:'conf', t:'Scene before settings', d:'Render configuration comes last so it can inspect what was actually built.'},
+  {a:'layout', b:'plots', dash:true, l:'resolves', t:'tower_plots(seed)', d:'Placement is computed once, in pure Python, with no bpy involved — which is why it can be unit-tested without Blender.'},
+  {a:'plots', b:'bld', l:'consumed by', t:'Footprints in', d:'Buildings reads x, z, w, d, h, is_glass and a per-plot seed. Every random choice derives from that seed, so each tower is reproducible and independent.'},
+  {a:'scat', b:'inst', dash:true, l:'produces', t:'Instances out', d:'The count is the check. Success here means non-zero instances, not a clean exit.'},
+  {a:'light', b:'atmo', dash:true, l:'builds', t:'Bounded medium', d:'Density is calibrated against the ~340-unit camera distance so the horizon shows aerial perspective instead of fading to flat milk.'},
+  {a:'conf', b:'dev', dash:true, l:'selects', t:'Device decision', d:'Logged loudly, because this single choice is the difference between seconds and minutes per frame.'},
+  {a:'conf', b:'ready', t:'Ready', d:'Scene fully described. Nothing has been rendered yet.'},
+  {a:'ready', b:'still', l:'default', t:'Render branch', d:'The default action. Everything else is opt-in behind a flag.'},
+  {a:'ready', b:'gltf', l:'flag', t:'Export branch', d:'Hides the atmosphere box first — a Cycles-only construct with no surface shader, which would otherwise export as a giant opaque cube wrapped around the city.'},
+  {a:'ready', b:'blend', l:'flag', t:'Save branch', d:'A straight save of the scene, no conversion and nothing lost.'},
+  {a:'still', b:'png', t:'Writes PNG', d:'Colour managed through AgX, with a glare pass so the emissive windows bloom the way a lens would.'},
+  {a:'gltf', b:'glb', t:'Writes GLB', d:'Geometry, PBR materials, emission and hierarchy survive. Volumetrics, true glass refraction and every bounce of GI do not — they belong to the renderer, not the scene.'},
+  {a:'blend', b:'bfile', t:'Writes .blend', d:'Includes the node graphs, so the procedural materials stay editable.'},
+  {a:'png', b:'gal', t:'Displayed by', d:'A static page; open it directly or over the local server.'},
+  {a:'glb', b:'view', t:'Loaded by', d:'Fetched by GLTFLoader, which needs HTTP — file:// is blocked in Chromium browsers.'},
+  {a:'bfile', b:'gui', t:'Opened in', d:'Set the viewport shading to Rendered for live Cycles.'},
+];
+
+// Each node points at the code behind it. `sym` is matched against the file at
+// click time rather than a hardcoded line number, so these keep working as the
+// source moves around.
+const SRC = {
+  shell:  ['shell.nix',                    'nixpkgs ? builtins.fetchTarball'],
+  gc:     ['shell.nix',                    'GC root'],
+  blender:['shell.nix',                    'pkgs.blender'],
+  gpu:    ['blender/city/render.py',       'def configure_device'],
+  cli:    ['blender/build_city.py',        'def _parse_args'],
+  entry:  ['blender/build_city.py',        'def main'],
+  layout: ['blender/city/layout.py',       'PITCH: float'],
+  mat:    ['blender/city/materials.py',    'def build_materials'],
+  terr:   ['blender/city/terrain.py',      'def build_terrain'],
+  bld:    ['blender/city/buildings.py',    'def build_buildings'],
+  scat:   ['blender/city/scatter.py',      'def build_scatter'],
+  light:  ['blender/city/lighting.py',     'def build_lighting'],
+  cam:    ['blender/city/camera.py',       'def build_camera'],
+  conf:   ['blender/city/render.py',       'def configure(ctx)'],
+  plots:  ['blender/city/layout.py',       'def tower_plots'],
+  inst:   ['blender/city/scatter.py',      'def _build_park_node_group'],
+  atmo:   ['blender/city/lighting.py',     'def _build_atmosphere_domain'],
+  dev:    ['blender/city/render.py',       'def configure_device'],
+  ready:  ['blender/build_city.py',        'def _run_stage'],
+  still:  ['blender/city/render.py',       'def render(ctx)'],
+  gltf:   ['blender/build_city.py',        'def _export_gltf'],
+  blend:  ['blender/build_city.py',        'save_as_mainfile'],
+  png:    ['blender/city/render.py',       'def _output_path'],
+  glb:    ['blender/build_city.py',        'export_scene.gltf'],
+  bfile:  ['blender/build_city.py',        'save_as_mainfile'],
+  gal:    ['gallery.html',                 '<figure>'],
+  view:   ['blender_city.html',            'function prepare'],
+  gui:    ['docs/BLENDER.md',              '## Run it'],
+};
+
+const KIND = {env:'--env', code:'--code', data:'--data', stage:'--stage', out:'--out', view:'--view'};
+const KINDNAME = {env:'environment', code:'entry / contract', data:'data produced', stage:'build stage', out:'output file', view:'how you view it'};
+const byId = Object.fromEntries(N.map(n => [n.id, n]));
+const SVGNS = 'http://www.w3.org/2000/svg';
+const svg = document.getElementById('svg');
+const W = 1060, H = 1470;
+svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+svg.setAttribute('width', W);
+svg.setAttribute('height', H);
+
+svg.innerHTML = `<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+  markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+  <path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker></defs>`;
+
+const el = (n, a = {}) => { const e = document.createElementNS(SVGNS, n);
+  for (const k in a) e.setAttribute(k, a[k]); return e; };
+
+// ---- edge routing ---------------------------------------------------------
+function route(a, b) {
+  const acx = a.x + a.w / 2, bcx = b.x + b.w / 2;
+  const below = b.y > a.y + a.h - 1;
+  if (below) {
+    const y1 = a.y + a.h, y2 = b.y;
+    if (Math.abs(acx - bcx) < 2) return { d:`M${acx},${y1} L${bcx},${y2}`, mx:acx, my:(y1+y2)/2 };
+    const my = y1 + (y2 - y1) / 2;
+    return { d:`M${acx},${y1} L${acx},${my} L${bcx},${my} L${bcx},${y2}`, mx:(acx+bcx)/2, my:my };
+  }
+  // same band: go horizontally, left-to-right or right-to-left
+  const ltr = bcx > acx;
+  const x1 = ltr ? a.x + a.w : a.x, x2 = ltr ? b.x : b.x + b.w;
+  const cy = a.y + a.h / 2, cy2 = b.y + b.h / 2;
+  if (Math.abs(cy - cy2) < 2) return { d:`M${x1},${cy} L${x2},${cy2}`, mx:(x1+x2)/2, my:cy };
+  const mx = (x1 + x2) / 2;
+  return { d:`M${x1},${cy} L${mx},${cy} L${mx},${cy2} L${x2},${cy2}`, mx, my:(cy+cy2)/2 };
+}
+
+const gEdges = el('g'), gNodes = el('g');
+svg.append(gEdges, gNodes);
+
+for (const e of E) {
+  const a = byId[e.a], b = byId[e.b];
+  if (!a || !b) { console.warn('bad edge', e); continue; }
+  const r = route(a, b);
+  const hit = el('path', { class:'hit', d:r.d, tabindex:'0', role:'img',
+    'aria-label': (e.t || '') + '. ' + (e.d || '') });
+  const vis = el('path', { class:'edge' + (e.dash ? ' dash' : ''), d:r.d });
+  hit.dataset.t = e.t || (a.lab + ' → ' + b.lab);
+  hit.dataset.d = e.d || '';
+  hit.dataset.k = 'connection';
+  gEdges.append(hit, vis);
+  if (e.l) {
+    const tx = el('text', { class:'elab', x:r.mx, y:r.my - 5, 'text-anchor':'middle' });
+    tx.textContent = e.l;
+    gEdges.append(tx);
+  }
+}
+
+for (const n of N) {
+  const g = el('g', { class:'node', tabindex:'0', role:'img',
+    'aria-label': (n.t || n.lab) + '. ' + (n.d || '') });
+  const col = `var(${KIND[n.kind]})`;
+  g.append(el('rect', { x:n.x, y:n.y, width:n.w, height:n.h, stroke:col }));
+  const t1 = el('text', { class:'lab', x:n.x + 14, y:n.y + (n.sub ? 27 : n.h / 2 + 5) });
+  t1.textContent = n.lab;
+  g.append(t1);
+  if (n.sub) {
+    const t2 = el('text', { class:'sub2', x:n.x + 14, y:n.y + 46 });
+    t2.textContent = n.sub;
+    g.append(t2);
+  }
+  g.dataset.t = n.t || n.lab;
+  g.dataset.d = n.d || '';
+  g.dataset.k = KINDNAME[n.kind];
+  const src = SRC[n.id];
+  if (src) {
+    g.dataset.src = src[0];
+    g.dataset.sym = src[1];
+    g.classList.add('has-src');
+    // Small "source" affordance in the corner, so it is discoverable without
+    // having to hover every box to find out which ones are clickable.
+    const tag = el('text', { class:'srctag', x:n.x + n.w - 12, y:n.y + 16, 'text-anchor':'end' });
+    tag.textContent = '‹›';
+    g.append(tag);
+    g.addEventListener('click', () => openSource(src[0], src[1]));
+    g.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openSource(src[0], src[1]); }
+    });
+  }
+  gNodes.append(g);
+}
+
+// ---- tooltip --------------------------------------------------------------
+const tip = document.getElementById('tip');
+const tK = tip.querySelector('.kind'), tH = tip.querySelector('h3'), tP = tip.querySelector('p');
+
+function show(ev, node) {
+  tK.textContent = node.dataset.k || '';
+  tH.textContent = node.dataset.t || '';
+  tP.textContent = node.dataset.d || '';
+  tip.classList.add('on');
+  place(ev);
+}
+function place(ev) {
+  const pad = 14, r = tip.getBoundingClientRect();
+  let x = (ev.clientX ?? innerWidth / 2) + pad, y = (ev.clientY ?? innerHeight / 2) + pad;
+  if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - pad;
+  if (y + r.height > innerHeight - 8) y = ev.clientY - r.height - pad;
+  tip.style.left = Math.max(8, x) + 'px';
+  tip.style.top = Math.max(8, y) + 'px';
+}
+function hide() { tip.classList.remove('on'); }
+
+for (const t of document.querySelectorAll('.node, .hit')) {
+  t.addEventListener('mouseenter', e => show(e, t));
+  t.addEventListener('mousemove', place);
+  t.addEventListener('mouseleave', hide);
+  t.addEventListener('focus', () => {
+    const b = t.getBoundingClientRect();
+    show({ clientX:b.left + b.width / 2, clientY:b.bottom }, t);
+  });
+  t.addEventListener('blur', hide);
+}
+addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
+
+// ---- source panel ---------------------------------------------------------
+// Clicking a node opens the code behind it. The symbol is located by searching
+// the fetched file, not by a stored line number, so this does not rot when the
+// source shifts by a few lines.
+const panel  = document.getElementById('panel');
+const pPath  = document.getElementById('p-path');
+const pCode  = document.getElementById('p-code');
+const pRaw   = document.getElementById('p-raw');
+const pNote  = document.getElementById('p-note');
+const CONTEXT_BEFORE = 6, CONTEXT_AFTER = 46;
+
+async function openSource(path, sym) {
+  hide();
+  panel.classList.add('on');
+  panel.setAttribute('aria-hidden', 'false');
+  pPath.textContent = path;
+  pRaw.href = path;
+  pNote.textContent = '';
+  pCode.textContent = 'loading…';
+
+  let text;
+  try {
+    const res = await fetch(path);
+    if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+    text = await res.text();
+  } catch (err) {
+    pCode.textContent = '';
+    pNote.innerHTML = 'Could not read <code>' + path + '</code> — ' + err.message +
+      '.<br>Over <code>file://</code> browsers block this fetch; serve the folder ' +
+      '(<code>python3 -m http.server 8731</code>) or use “open raw”.';
+    return;
+  }
+
+  const lines = text.split('\n');
+  let hit = lines.findIndex(l => l.includes(sym));
+  if (hit < 0) {
+    // Symbol moved or was renamed. Show the top of the file and say so, rather
+    // than silently displaying an arbitrary chunk as if it were the target.
+    hit = 0;
+    pNote.innerHTML = 'Could not find <code>' + esc(sym) + '</code> in this file — ' +
+      'showing the top instead. The symbol was probably renamed.';
+  }
+  const from = Math.max(0, hit - CONTEXT_BEFORE);
+  const to   = Math.min(lines.length, hit + CONTEXT_AFTER);
+
+  pCode.innerHTML = '';
+  for (let i = from; i < to; i++) {
+    const row = document.createElement('div');
+    row.className = 'row' + (i === hit ? ' hit' : '');
+    const num = document.createElement('span');
+    num.className = 'ln';
+    num.textContent = String(i + 1).padStart(4, ' ');
+    const code = document.createElement('span');
+    code.className = 'src';
+    code.textContent = lines[i] || ' ';
+    row.append(num, code);
+    pCode.append(row);
+  }
+  const target = pCode.querySelector('.row.hit');
+  if (target) target.scrollIntoView({ block:'center' });
+}
+const esc = s => s.replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c]));
+
+function closePanel() {
+  panel.classList.remove('on');
+  panel.setAttribute('aria-hidden', 'true');
+}
+document.getElementById('p-close').addEventListener('click', closePanel);
+addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+panel.addEventListener('click', e => { if (e.target === panel) closePanel(); });
+</script>
+</body>
+</html>
