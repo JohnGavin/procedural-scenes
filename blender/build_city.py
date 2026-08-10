@@ -204,10 +204,51 @@ def main(argv: list[str] | None = None) -> None:
     if args.export_gltf is not None:
         _export_gltf(args.export_gltf)
 
+    _setup_gui_viewport()
+
     if not args.no_render:
         _run_stage("render.render", render.render, ctx)
     else:
         logger.info("--no-render: skipping render.render")
+
+
+def _setup_gui_viewport() -> None:
+    """When running with a UI, open on a rendered view through the camera.
+
+    Only fires when Blender is NOT in background mode, so the headless render
+    path is untouched. Deferred through a timer because at the moment a
+    `--python` script runs the areas are not laid out yet, so walking the screen
+    immediately finds nothing to configure.
+
+    Entirely cosmetic — every failure here is swallowed. A demo that opens on
+    the wrong shading is a much smaller problem than one that refuses to open.
+    """
+    import bpy
+
+    if bpy.app.background:
+        return
+
+    def _apply() -> None:
+        try:
+            for window in bpy.context.window_manager.windows:
+                for area in window.screen.areas:
+                    if area.type != "VIEW_3D":
+                        continue
+                    for space in area.spaces:
+                        if space.type != "VIEW_3D":
+                            continue
+                        space.shading.type = "RENDERED"
+                        space.clip_end = 20000.0  # the ground plane is 1600 across
+                        space.region_3d.view_perspective = "CAMERA"
+            logger.info("gui: viewport set to Rendered, looking through CityCamera")
+        except Exception as exc:  # noqa: BLE001 — cosmetic only
+            logger.warning("gui: could not configure viewport (%s)", exc)
+        return None  # unregister the timer
+
+    try:
+        bpy.app.timers.register(_apply, first_interval=0.4)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("gui: timer unavailable (%s)", exc)
 
 
 def _export_gltf(path: Path) -> None:

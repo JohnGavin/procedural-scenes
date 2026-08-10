@@ -246,6 +246,13 @@ def _build_atmosphere_domain(ctx) -> None:
 
     obj = bpy.data.objects.new("CityAtmosphere", mesh)
     bpy.context.scene.collection.objects.link(obj)
+    # Wireframe in the viewport. The box has no surface shader so it is already
+    # invisible to Cycles, but in the GUI's Solid shading it would draw as an
+    # opaque 1800-unit cube wrapped around the city, hiding everything. Wire
+    # keeps it selectable and honest about being there without blocking the view;
+    # Rendered shading still shows the volumetrics normally.
+    obj.display_type = "WIRE"
+    obj.hide_select = True
 
     mat = bpy.data.materials.get("city_atmosphere") or bpy.data.materials.new("city_atmosphere")
     mat.use_nodes = True
