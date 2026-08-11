@@ -1,4 +1,24 @@
-# The city, rebuilt in Blender
+# Blender scenes
+
+> **Two scenes now share this pipeline.** This document describes the city in
+> detail; the voxel cabin (`blender/cabin/`, `blender/build_cabin.py`) reuses
+> the same `render.py` and `camera.py` unchanged.
+>
+> All three web pages handle every scene, with a tab each, driven by the shared
+> registry in `demos.js` — adding a demo is one entry there, not three edits:
+>
+> | Page | What it shows |
+> |---|---|
+> | `gallery.html` | the stills, with captions on what each demonstrates |
+> | `pipeline.html` | the build graph, hover explanations, click-through to source |
+> | `viewer.html` | the exported glTF, orbitable in the browser |
+>
+> They need an HTTP server (`python3 -m http.server 8731`) — `file://` blocks
+> the `.glb` and source fetches. Deep-link a scene with `#city` or `#cabin`.
+
+---
+
+## The city, rebuilt in Blender
 
 `buildings.html` draws a procedural city with three.js in the browser. This is
 the same city plan rebuilt in Blender 5.2 through the `bpy` API, rendered with
