@@ -388,7 +388,12 @@ def _export_gltf(path: Path) -> None:
 
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    atmosphere = bpy.data.objects.get("CabinAtmosphere")
+    # The fog domain is a Cycles-only construct: a box with a volume shader and
+    # no surface, invisible to the path tracer. A rasteriser has no such concept,
+    # so exporting it would wrap the whole valley in an opaque cube. Check both
+    # names — lighting.py calls it CabinFog; the earlier scaffold assumed
+    # CabinAtmosphere, and a stale name here fails silently by exporting the box.
+    atmosphere = bpy.data.objects.get("CabinFog") or bpy.data.objects.get("CabinAtmosphere")
     hidden = False
     if atmosphere is not None:
         atmosphere.hide_viewport = True

@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interactive viewer — Blender scenes</title>
+<style>
+  html, body { margin:0; height:100%; overflow:hidden; background:#8fb2d4; }
+  canvas { display:block; }
+  #hud {
+    position:fixed; left:12px; top:12px; z-index:10; max-width:340px;
+    font:13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color:#1d2733; background:rgba(255,255,255,.80); backdrop-filter:blur(6px);
+    padding:10px 12px; border-radius:8px; box-shadow:0 2px 12px rgba(0,0,0,.18);
+  }
+  #hud h1 { font-size:13px; margin:0 0 6px; }
+  #hud p { margin:0 0 8px; color:#47525f; }
+  .row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px; }
+  .row.sep { border-top:1px solid #d8dee5; padding-top:8px; }
+  button {
+    font:inherit; font-size:12px; padding:5px 9px; cursor:pointer;
+    border:1px solid #b9c2cc; border-radius:5px; background:#fff; color:#1d2733;
+  }
+  button[aria-pressed="true"], button[aria-selected="true"] {
+    background:#1d2733; color:#fff; border-color:#1d2733;
+  }
+  button:hover { border-color:#6f7b88; }
+  #stat { font:11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color:#5c6470; }
+  #note { font-size:11.5px; color:#5c6470; margin-top:6px; }
+  #err { color:#8a1c1c; font-size:12px; }
+  a { color:#235e42; }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <h1 id="title">Interactive viewer</h1>
+  <p><b>Drag</b> to orbit · <b>scroll</b> to zoom · <b>right-drag</b> to pan.</p>
+  <div class="row" id="demo-tabs" role="tablist"></div>
+  <div class="row sep" id="variants"></div>
+  <div class="row">
+    <button id="b-spin" aria-pressed="false">Auto-orbit</button>
+    <button id="b-reset">Reset view</button>
+  </div>
+  <div id="stat">loading…</div>
+  <div id="note"></div>
+  <div id="err"></div>
+</div>
+
+<!-- Classic script, loaded before the module so window.DEMOS is populated when
+     the module body runs. Module execution is deferred anyway, but relying on
+     that ordering implicitly is the kind of thing that breaks later. -->
+<script src="demos.js"></script>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader }    from 'three/addons/loaders/GLTFLoader.js';
+import { Sky }           from 'three/addons/objects/Sky.js';
+
+const DEMOS = window.DEMOS;
+const statEl = document.getElementById('stat');
+const errEl  = document.getElementById('err');
+const noteEl = document.getElementById('note');
+const titleEl = document.getElementById('title');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 40000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI / 2 - 0.02;   // never drop below the ground
+
+const sky = new Sky();
+sky.scale.setScalar(45000);
+scene.add(sky);
+
+const sun = new THREE.DirectionalLight(0xfff4e0, 2.4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+scene.add(sun, sun.target);
+const hemi = new THREE.HemisphereLight(0xbfd4ea, 0x4a4a3f, 0.9);
+scene.add(hemi);
+
+let home = { pos: new THREE.Vector3(1, 1, 1), target: new THREE.Vector3() };
+
+/* Camera is derived from the loaded model's bounding box rather than stored
+ * per demo. The two scenes use different world scales and axis conventions
+ * (the city inherits a three.js Y-up layout; the cabin is native Blender Z-up,
+ * converted again on glTF export), so hand-written camera coordinates were a
+ * standing source of "why is it pointing at nothing". Auto-framing means a new
+ * demo needs no camera maths at all. */
+function frameObject(root, shadowSpan) {
+  const box = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
+  const centre = box.getCenter(new THREE.Vector3());
+  const radius = Math.max(size.length() / 2, 1);
+
+  const dir = new THREE.Vector3(1, 0.55, 1).normalize();
+  home.pos = centre.clone().add(dir.multiplyScalar(radius * 1.9));
+  home.target = centre.clone();
+  // Look slightly above centre — the interesting part of both scenes (towers,
+  // cabin roof) sits above the geometric middle of a large ground plane.
+  home.target.y += size.y * 0.05;
+
+  camera.near = Math.max(0.05, radius / 500);
+  camera.far = radius * 60;
+  camera.updateProjectionMatrix();
+
+  const s = shadowSpan ?? radius * 1.2;
+  Object.assign(sun.shadow.camera, { left:-s, right:s, top:s, bottom:-s, near:0.5, far:radius * 12 });
+  sun.shadow.camera.updateProjectionMatrix();
+  resetView();
+}
+function resetView() {
+  camera.position.copy(home.pos);
+  controls.target.copy(home.target);
+  controls.update();
+}
+
+function applyMood(cfg, night) {
+  const { elev, azim } = night ? cfg.night : cfg.day;
+  const phi = THREE.MathUtils.degToRad(90 - elev);
+  const theta = THREE.MathUtils.degToRad(azim);
+  const dir = new THREE.Vector3().setFromSphericalCoords(1, phi, theta);
+
+  const u = sky.material.uniforms;
+  u.sunPosition.value.copy(dir);
+  u.turbidity.value = night ? 6 : 4;
+  u.rayleigh.value = night ? 0.6 : 2.2;
+  u.mieCoefficient.value = 0.005;
+  u.mieDirectionalG.value = 0.8;
+
+  const span = home.pos.distanceTo(home.target) || 100;
+  sun.position.copy(dir).multiplyScalar(span * 3);
+  sun.target.position.copy(home.target);
+  sun.intensity = night ? 0.05 : 2.4;
+  sun.color.set(night ? 0x8fa8d0 : 0xfff4e0);
+  hemi.intensity = night ? 0.12 : 0.9;
+  renderer.toneMappingExposure = night ? 0.75 : 1.0;
+}
+
+function prepare(root, night) {
+  root.traverse(o => {
+    if (o.isCamera) { o.visible = false; return; }
+    if (!o.isMesh) return;
+    o.castShadow = true;
+    o.receiveShadow = true;
+    for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+      if (!m) continue;
+      // Blender glass exports as low-opacity PBR; without this the towers and
+      // windows read as solid blocks. An approximation of transmission — the
+      // real thing is what stays behind in Cycles.
+      if (m.transmission > 0 || (m.opacity !== undefined && m.opacity < 1)) {
+        m.transparent = true;
+        m.depthWrite = false;
+      }
+      // Emissive surfaces: in Cycles these illuminate the scene. Here they can
+      // only glow — a rasteriser's emitter lights nothing but itself.
+      if (m.emissive && m.emissive.getHex() !== 0x000000) {
+        m.emissiveIntensity = night ? 2.6 : 0.5;
+      }
+    }
+  });
+}
+
+const loader = new GLTFLoader();
+const cache = new Map();
+let current = null;
+let demo = null;
+
+function load(variant) {
+  errEl.textContent = '';
+  statEl.textContent = 'loading ' + variant.file.split('/').pop() + '…';
+  const done = root => swap(root, variant);
+  if (cache.has(variant.file)) return done(cache.get(variant.file));
+  loader.load(variant.file,
+    gltf => { cache.set(variant.file, gltf.scene); done(gltf.scene); },
+    xhr => { if (xhr.total) statEl.textContent = 'loading ' + Math.round(100 * xhr.loaded / xhr.total) + '%'; },
+    e => {
+      errEl.textContent = 'Could not load ' + variant.file +
+        ' — export it first, and note file:// blocks this fetch in most browsers.';
+      statEl.textContent = '';
+      console.error(e);
+    });
+}
+
+function swap(root, variant) {
+  if (current) scene.remove(current);
+  prepare(root, variant.night);
+  scene.add(root);
+  current = root;
+  frameObject(root);
+  applyMood(demo.viewer.sky, variant.night);
+
+  let meshes = 0, tris = 0;
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    meshes++;
+    const g = o.geometry;
+    tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
+  });
+  statEl.textContent =
+    `${variant.label} · ${meshes} mesh${meshes === 1 ? '' : 'es'} · ${Math.round(tris).toLocaleString()} triangles`;
+}
+
+// ---- ui -------------------------------------------------------------------
+const demoTabs = document.getElementById('demo-tabs');
+const variantRow = document.getElementById('variants');
+
+function selectDemo(id) {
+  demo = DEMOS.find(d => d.id === id) || DEMOS[0];
+  for (const b of demoTabs.children) b.setAttribute('aria-selected', String(b.dataset.id === demo.id));
+  titleEl.textContent = demo.title;
+  noteEl.textContent = demo.viewer.note || '';
+
+  variantRow.innerHTML = '';
+  demo.viewer.variants.forEach((v, i) => {
+    const b = document.createElement('button');
+    b.textContent = v.label;
+    b.setAttribute('aria-pressed', String(i === 0));
+    b.onclick = () => {
+      for (const x of variantRow.children) x.setAttribute('aria-pressed', String(x === b));
+      load(v);
+    };
+    variantRow.append(b);
+  });
+  load(demo.viewer.variants[0]);
+  if (location.hash.slice(1) !== demo.id) history.replaceState(null, '', '#' + demo.id);
+}
+
+for (const d of DEMOS) {
+  const b = document.createElement('button');
+  b.textContent = d.title;
+  b.dataset.id = d.id;
+  b.setAttribute('role', 'tab');
+  b.onclick = () => selectDemo(d.id);
+  demoTabs.append(b);
+}
+
+const bSpin = document.getElementById('b-spin');
+bSpin.onclick = () => {
+  controls.autoRotate = !controls.autoRotate;
+  controls.autoRotateSpeed = 0.5;
+  bSpin.setAttribute('aria-pressed', String(controls.autoRotate));
+};
+document.getElementById('b-reset').onclick = resetView;
+
+selectDemo(location.hash.slice(1) || DEMOS[0].id);
+addEventListener('hashchange', () => selectDemo(location.hash.slice(1)));
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+</script>
+</body>
+</html>

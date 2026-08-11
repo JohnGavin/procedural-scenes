@@ -3,210 +3,141 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The same city, two renderers</title>
+<title>Render gallery — Blender scenes</title>
 <style>
   :root {
-    --bg: #f6f6f4;
-    --panel: #ffffff;
-    --ink: #1b2028;
-    --muted: #5c6470;
-    --rule: #dcdcd6;
-    --accent: #2f6f4f;
-    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --bg:#f6f6f4; --panel:#fff; --ink:#1b2028; --muted:#5c6470; --rule:#dcdcd6;
+    --accent:#2f6f4f; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #0f1216;
-      --panel: #171b21;
-      --ink: #e8e9ea;
-      --muted: #9aa3ae;
-      --rule: #2a3039;
-      --accent: #7fd0a3;
+      --bg:#0f1216; --panel:#171b21; --ink:#e8e9ea; --muted:#9aa3ae; --rule:#2a3039; --accent:#7fd0a3;
     }
   }
   :root[data-theme="dark"] {
-    --bg: #0f1216;
-    --panel: #171b21;
-    --ink: #e8e9ea;
-    --muted: #9aa3ae;
-    --rule: #2a3039;
-    --accent: #7fd0a3;
+    --bg:#0f1216; --panel:#171b21; --ink:#e8e9ea; --muted:#9aa3ae; --rule:#2a3039; --accent:#7fd0a3;
   }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+         padding:0 0 5rem; }
+  .wrap { max-width:1180px; margin:0 auto; padding:0 1.25rem; }
+  header { border-bottom:1px solid var(--rule); padding:2.5rem 0 1.25rem; margin-bottom:1.5rem; }
+  h1 { font-size:clamp(1.5rem,4vw,2.2rem); margin:0 0 .4rem; letter-spacing:-.02em; }
+  .sub { color:var(--muted); margin:0 0 1rem; max-width:66ch; }
 
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--ink);
-    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    padding: 0 0 5rem;
+  nav.tabs { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:.25rem; }
+  nav.tabs button {
+    font:600 13px/1 var(--mono); padding:.6rem .9rem; cursor:pointer;
+    border:1px solid var(--rule); border-radius:7px; background:var(--panel); color:var(--muted);
   }
-  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 1.25rem; }
+  nav.tabs button[aria-selected="true"] { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+  nav.tabs button:hover { color:var(--ink); }
 
-  header { border-bottom: 1px solid var(--rule); padding: 3rem 0 2rem; margin-bottom: 2.5rem; }
-  h1 { font-size: clamp(1.6rem, 4vw, 2.4rem); margin: 0 0 .5rem; letter-spacing: -.02em; }
-  .sub { color: var(--muted); margin: 0 0 1.5rem; max-width: 62ch; }
+  .facts { display:flex; flex-wrap:wrap; gap:.5rem; margin:1.25rem 0 0; }
+  .fact { font:12px/1 var(--mono); padding:.45rem .6rem; border:1px solid var(--rule);
+          border-radius:5px; color:var(--muted); background:var(--panel); }
+  .fact b { color:var(--accent); font-weight:600; }
 
-  .facts { display: flex; flex-wrap: wrap; gap: .5rem; }
-  .fact {
-    font: 12px/1 var(--mono);
-    padding: .45rem .6rem;
-    border: 1px solid var(--rule);
-    border-radius: 5px;
-    color: var(--muted);
-    background: var(--panel);
-  }
-  .fact b { color: var(--accent); font-weight: 600; }
-
-  figure {
-    margin: 0 0 3rem;
-    background: var(--panel);
-    border: 1px solid var(--rule);
-    border-radius: 10px;
-    overflow: hidden;
-  }
-  figure img {
-    display: block;
-    width: 100%;
-    height: auto;
-    background: #222;
-  }
-  figcaption { padding: 1.1rem 1.25rem 1.25rem; border-top: 1px solid var(--rule); }
-  .name {
-    font: 600 13px/1 var(--mono);
-    color: var(--accent);
-    text-transform: uppercase;
-    letter-spacing: .08em;
-    margin-bottom: .45rem;
-  }
-  .what { margin: 0 0 .5rem; }
-  .why { margin: 0; color: var(--muted); font-size: .92rem; }
-  .why b { color: var(--ink); font-weight: 600; }
-
-  h2 { font-size: 1.15rem; margin: 3rem 0 1rem; padding-top: 2rem; border-top: 1px solid var(--rule); }
-  table { border-collapse: collapse; width: 100%; font-size: .92rem; }
-  th, td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
-  th { color: var(--muted); font-weight: 600; font-size: .82rem; text-transform: uppercase; letter-spacing: .05em; }
-  td code, p code { font: 13px var(--mono); color: var(--accent); }
-  .scroll { overflow-x: auto; }
-
-  a { color: var(--accent); }
-  .note { color: var(--muted); font-size: .9rem; }
+  figure { margin:0 0 3rem; background:var(--panel); border:1px solid var(--rule);
+           border-radius:10px; overflow:hidden; }
+  figure img { display:block; width:100%; height:auto; background:#222; }
+  figcaption { padding:1.1rem 1.25rem 1.25rem; border-top:1px solid var(--rule); }
+  .name { font:600 13px/1 var(--mono); color:var(--accent); text-transform:uppercase;
+          letter-spacing:.08em; margin-bottom:.45rem; }
+  .what { margin:0 0 .5rem; }
+  .why { margin:0; color:var(--muted); font-size:.92rem; }
+  .why b { color:var(--ink); font-weight:600; }
+  a { color:var(--accent); }
+  .note { color:var(--muted); font-size:.9rem; }
+  code { font:13px var(--mono); color:var(--accent); }
+  .run { background:var(--panel); border:1px solid var(--rule); border-radius:8px;
+         padding:.7rem .85rem; font:12.5px var(--mono); overflow-x:auto; margin:1.5rem 0 2rem; }
 </style>
 </head>
 <body>
 <div class="wrap">
-
-<header>
-  <h1>The same city, two renderers</h1>
-  <p class="sub">
-    One city plan — same block grid, same river meander, same park — built twice.
-    Once with three.js in the browser (<a href="buildings.html">buildings.html</a>),
-    once with Blender&nbsp;5.2 through <code>bpy</code> and rendered in Cycles.
-    The layout constants are shared, so what changes between them is the renderer,
-    not the city.
-  </p>
-  <p class="sub">
-    These stills are what Cycles buys and what it costs: real light transport,
-    but seconds per frame instead of milliseconds. The Blender city is also
-    <a href="blender_city.html"><b>interactive here</b></a> — exported to glTF and
-    orbitable in the browser, with the light transport left behind.
-  </p>
-  <div class="facts">
-    <span class="fact">blender <b>5.2.0 LTS</b></span>
-    <span class="fact">cycles <b>METAL</b></span>
-    <span class="fact">gpu <b>M2 Max · 38 cores</b></span>
-    <span class="fact">1280×720 · <b>96 samples</b></span>
-    <span class="fact">plots <b>84</b></span>
-    <span class="fact">gn instances <b>167</b></span>
-    <span class="fact">render <b>4–6 s</b></span>
-  </div>
-</header>
-
-<figure>
-  <img src="renders/city_noon.png" alt="Daylight aerial view of the procedural city: glass and concrete towers on a block grid, a meandering river to the west crossed by two bridges, and a green park with a pond to the east.">
-  <figcaption>
-    <div class="name">noon · 60° sun</div>
-    <p class="what">Global illumination, soft shadows, and glass that actually refracts.</p>
-    <p class="why">
-      <b>Not possible in three.js:</b> light bounces. Facades pick up colour from
-      the surfaces around them, and the sun's angular diameter gives shadows a
-      real penumbra instead of a hard edge.
+  <header>
+    <h1>Render gallery</h1>
+    <p class="sub">
+      Scenes built procedurally and path traced in Cycles. Each is also
+      <a href="viewer.html">interactive</a>, and its
+      <a href="pipeline.html">build pipeline is documented</a>.
     </p>
-  </figcaption>
-</figure>
-
-<figure>
-  <img src="renders/city_dusk.png" alt="The city at dusk under a deep blue sky, with warm light catching the tops of the two tallest towers and window grids beginning to glow.">
-  <figcaption>
-    <div class="name">dusk · 4° sun</div>
-    <p class="what">Low sun through a physically-based sky, with depth of field.</p>
-    <p class="why">
-      <b>Not possible in three.js:</b> the sky model is live, not a baked
-      environment map — drop the sun to 4° and the long atmospheric path strips
-      the blue out by itself. Nothing is hand-tinted.
-    </p>
-  </figcaption>
-</figure>
-
-<figure>
-  <img src="renders/city_night.png" alt="The city at night, almost entirely dark except for two towers whose scattered lit windows glow brightly and cast light onto the buildings and ground below.">
-  <figcaption>
-    <div class="name">night · sun below the horizon</div>
-    <p class="what">The windows are the light source.</p>
-    <p class="why">
-      <b>The clearest thing three.js cannot do.</b> An emissive material in a
-      rasteriser looks bright but illuminates nothing. Here the lit panes are
-      real emitters: they light the towers opposite, the street below, and the
-      haze between them. A procedural noise mask decides which panes are lit.
-    </p>
-  </figcaption>
-</figure>
-
-<figure>
-  <img src="renders/city_tiltshift.png" alt="Steep near-overhead view of the whole city rendered to look like a miniature model, with the block grid, both bridges and the park visible and the edges of the frame softly out of focus.">
-  <figcaption>
-    <div class="name">tiltshift · f/1.4</div>
-    <p class="what">A real aperture, not a blur filter.</p>
-    <p class="why">
-      <b>Not possible in three.js:</b> the defocus comes from tracing rays
-      through a physical lens, so it falls off correctly with distance. That
-      shallow plane across a large subject is what makes a city read as a model.
-    </p>
-  </figcaption>
-</figure>
-
-<h2>What the rebuild actually buys</h2>
-<div class="scroll">
-<table>
-  <thead><tr><th>Feature</th><th>Why three.js can't</th><th>Where you see it</th></tr></thead>
-  <tbody>
-    <tr><td>Path tracing</td><td>Rasteriser — no true GI</td><td>Colour bleed onto the street</td></tr>
-    <tr><td>Emissive lighting</td><td>Emissive maps light nothing</td><td><code>night</code></td></tr>
-    <tr><td>Glass BSDF</td><td>Faked with a blue tint</td><td>Tower facades</td></tr>
-    <tr><td>Geometry Nodes</td><td>No procedural graph — 110 hand-placed trees</td><td>Park scatter, 167 instances</td></tr>
-    <tr><td>Physical sky</td><td>Approximated, then baked</td><td>Sun angle drives the light</td></tr>
-    <tr><td>Volumetrics</td><td>Unavailable</td><td>Haze toward the horizon</td></tr>
-    <tr><td>Depth of field</td><td>Post-process approximation</td><td><code>tiltshift</code></td></tr>
-    <tr><td>Procedural materials</td><td>Needs textures or canvas hacks</td><td>Every surface — no image assets</td></tr>
-  </tbody>
-</table>
+    <nav class="tabs" id="tabs" role="tablist"></nav>
+  </header>
+  <main id="main"></main>
 </div>
 
-<h2>Reproduce it</h2>
-<p class="note">
-  <code>nix-shell</code>, then
-  <code>blender --background --python blender/build_city.py -- --preset night</code>.
-  Presets: <code>noon</code>, <code>dusk</code>, <code>night</code>, <code>tiltshift</code>.
-  Add <code>--seed N</code> for a different city under the same rules.
-  Full notes in <a href="docs/BLENDER.md">docs/BLENDER.md</a>.
-</p>
-<p class="note">
-  The two cities are not identical building-for-building: both are seeded, but the
-  Blender version uses Python's PRNG rather than reimplementing the JavaScript one.
-  Same rules and statistics, different draw.
-</p>
+<script src="demos.js"></script>
+<script>
+const tabs = document.getElementById('tabs');
+const main = document.getElementById('main');
 
-</div>
+function render(demo) {
+  main.innerHTML = '';
+
+  const intro = document.createElement('p');
+  intro.className = 'sub';
+  intro.innerHTML = demo.tagline;
+  main.append(intro);
+
+  const facts = document.createElement('div');
+  facts.className = 'facts';
+  for (const [k, v] of demo.facts) {
+    const s = document.createElement('span');
+    s.className = 'fact';
+    s.innerHTML = k + ' <b>' + v + '</b>';
+    facts.append(s);
+  }
+  main.append(facts);
+
+  const run = document.createElement('div');
+  run.className = 'run';
+  run.textContent = demo.run;
+  main.append(run);
+
+  for (const s of demo.stills) {
+    const fig = document.createElement('figure');
+    const img = document.createElement('img');
+    img.src = s.file;
+    img.alt = s.alt;
+    img.loading = 'lazy';
+    const cap = document.createElement('figcaption');
+    cap.innerHTML =
+      '<div class="name">' + s.name + '</div>' +
+      '<p class="what">' + s.what + '</p>' +
+      '<p class="why">' + s.why + '</p>';
+    fig.append(img, cap);
+    main.append(fig);
+  }
+
+  const foot = document.createElement('p');
+  foot.className = 'note';
+  foot.innerHTML =
+    'See this scene <a href="viewer.html#' + demo.id + '">interactively</a> ' +
+    '(orbit and zoom, with the light transport left behind), or read its ' +
+    '<a href="pipeline.html#' + demo.id + '">build pipeline</a>.';
+  main.append(foot);
+}
+
+function select(id) {
+  const demo = window.DEMOS.find(d => d.id === id) || window.DEMOS[0];
+  for (const b of tabs.children) b.setAttribute('aria-selected', String(b.dataset.id === demo.id));
+  render(demo);
+  if (location.hash.slice(1) !== demo.id) history.replaceState(null, '', '#' + demo.id);
+}
+
+for (const d of window.DEMOS) {
+  const b = document.createElement('button');
+  b.textContent = d.title;
+  b.dataset.id = d.id;
+  b.setAttribute('role', 'tab');
+  b.onclick = () => select(d.id);
+  tabs.append(b);
+}
+select(location.hash.slice(1) || window.DEMOS[0].id);
+addEventListener('hashchange', () => select(location.hash.slice(1)));
+</script>
 </body>
 </html>
