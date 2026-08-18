@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CBD, river and park — three.js</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #8fb2d4; }
+  canvas { display: block; }
+  #hud {
+    position: fixed; left: 12px; bottom: 12px;
+    font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #1d2733; background: rgba(255,255,255,.72);
+    padding: 8px 11px; border-radius: 6px; pointer-events: none;
+    backdrop-filter: blur(6px);
+  }
+  #hud b { color: #000; font-weight: 600; }
+  #hud span { opacity: .7; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <b>drag</b> orbit &nbsp;·&nbsp; <b>scroll</b> zoom &nbsp;·&nbsp; <b>right-drag</b> pan &nbsp;·&nbsp; <b>r</b> reseed<br>
+  <span>river west &nbsp;·&nbsp; CBD centre &nbsp;·&nbsp; park east</span>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.js",
+    "three/addons/": "./vendor/addons/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+
+// ===== layout constants ==================================================
+// The whole plan is driven by these — change PITCH/COLS/ROWS and the roads,
+// blocks, bridges and highways all stay consistent.
+const PITCH = 24;          // block centre-to-centre spacing
+const BLOCK = 16;          // block footprint (so road corridor = 8)
+const COLS = 5, ROWS = 7;  // city blocks east-west, north-south
+const CORE_R = 95;         // radius over which tower height decays
+
+const RIVER_X = -104, RIVER_W = 34;
+const PARK = { x: 112, z: 6, rx: 64, rz: 86 };
+const BRIDGE_Z = [-12, 36]; // road corridors that cross the water
+
+// Layered heights, spaced generously to keep coplanar surfaces off each other.
+const Y = { asphalt: 0.4, park: 0.5, river: 0.6, pond: 0.8, paint: 0.9, kerbTop: 1.2 };
+
+const colX = i => (i - (COLS - 1) / 2) * PITCH;
+const rowZ = j => (j - (ROWS - 1) / 2) * PITCH;
+
+// River meanders in x as a function of z.
+const riverCentre = z => RIVER_X + 15 * Math.sin(z * 0.016) + 7 * Math.sin(z * 0.005);
+
+// ===== renderer, scene, camera ==========================================
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.62;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xbcd2e4, 320, 1400);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 1, 20000);
+camera.position.set(215, 135, 235);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI / 2 - 0.02;   // never drop below the ground
+controls.minDistance = 60;
+controls.maxDistance = 900;
+controls.target.set(0, 14, 0);
+
+// ===== sky + sun =========================================================
+// Sun direction drives BOTH the atmospheric scattering and the shadow-casting
+// light, so the sky and the shadows always agree.
+const sunDir = new THREE.Vector3().setFromSphericalCoords(
+  1,
+  THREE.MathUtils.degToRad(90 - 34),   // elevation 34° — long, readable shadows
+  THREE.MathUtils.degToRad(128)        // azimuth
+);
+
+const sky = new Sky();
+sky.scale.setScalar(8000);
+sky.material.uniforms.turbidity.value = 5;
+sky.material.uniforms.rayleigh.value = 1.6;
+sky.material.uniforms.mieCoefficient.value = 0.005;
+sky.material.uniforms.mieDirectionalG.value = 0.8;
+sky.material.uniforms.sunPosition.value.copy(sunDir);
+
+// Bake the sky into an environment map so glass facades and water have
+// something real to reflect.
+const pmrem = new THREE.PMREMGenerator(renderer);
+const skyScene = new THREE.Scene();
+skyScene.add(sky);
+scene.environment = pmrem.fromScene(skyScene).texture;
+scene.add(sky);
+
+const sun = new THREE.DirectionalLight(0xfff4e0, 2.6);
+sun.position.copy(sunDir).multiplyScalar(400);
+sun.castShadow = true;
+sun.shadow.mapSize.set(4096, 4096);
+const S = 190;
+sun.shadow.camera.left = -S; sun.shadow.camera.right = S;
+sun.shadow.camera.top = S;   sun.shadow.camera.bottom = -S;
+sun.shadow.camera.near = 10; sun.shadow.camera.far = 900;
+sun.shadow.camera.updateProjectionMatrix();
+sun.shadow.bias = -0.0007;
+sun.shadow.normalBias = 0.4;
+scene.add(sun);
+
+scene.add(new THREE.HemisphereLight(0xbdd7f5, 0x50543f, 0.9));
+
+// ===== shared geometry / materials ======================================
+// One unit box, scaled per instance — keeps the GPU buffer count tiny even
+// with a few hundred buildings.
+const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
+
+const concreteMats = [0xb9bcc0, 0xa4a8ae, 0xcbc7bd, 0x8f959d, 0xd2cfc7].map(
+  c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.72, metalness: 0.08 })
+);
+const glassMats = [0x8fb4d6, 0x6f93b6, 0xa9c6de].map(
+  c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.12, metalness: 0.85 })
+);
+const crownMat  = new THREE.MeshStandardMaterial({ color: 0x6d737c, roughness: 0.6, metalness: 0.35 });
+const kerbMat   = new THREE.MeshStandardMaterial({ color: 0x9a9a94, roughness: 0.95 });
+const asphaltMat= new THREE.MeshStandardMaterial({ color: 0x3b3d42, roughness: 0.96 });
+const bridgeMat = new THREE.MeshStandardMaterial({ color: 0x8b8d92, roughness: 0.8 });
+const trunkMat  = new THREE.MeshStandardMaterial({ color: 0x5b4632, roughness: 0.95 });
+const leafMats  = [0x3f7a3a, 0x4f8c42, 0x35682f].map(
+  c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9, flatShading: true })
+);
+const waterMat  = new THREE.MeshStandardMaterial({
+  color: 0x2f6386, roughness: 0.08, metalness: 0.9,
+  transparent: true, opacity: 0.92
+});
+
+const TRUNK_GEO = new THREE.CylinderGeometry(0.45, 0.7, 4.5, 6);
+const BLOB_GEO  = new THREE.IcosahedronGeometry(3.2, 0);
+const CONE_GEO  = new THREE.ConeGeometry(3, 9, 7);
+
+// Dashed lane-marking texture, drawn on a canvas so there is no asset to ship.
+function laneTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 8;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, 64, 8);
+  g.fillStyle = '#f2efe4';
+  g.fillRect(0, 2, 34, 4);                 // dash then gap
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+const laneMat = new THREE.MeshBasicMaterial({
+  map: laneTexture(), transparent: true, depthWrite: false
+});
+
+// Soft cloud billboard, also canvas-generated.
+function cloudTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  for (let i = 0; i < 14; i++) {
+    const x = 40 + Math.random() * 176;
+    const y = 90 + Math.random() * 76;
+    const r = 26 + Math.random() * 46;
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, 'rgba(255,255,255,0.55)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  }
+  return new THREE.CanvasTexture(c);
+}
+
+// ===== deterministic RNG ================================================
+function rng(seed) {
+  let t = seed >>> 0;
+  return () => {
+    t = (t + 0x6d2b79f5) >>> 0;
+    let x = Math.imul(t ^ (t >>> 15), 1 | t);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ===== builders =========================================================
+const box = (mat, x, y, z, w, h, d) => {
+  const m = new THREE.Mesh(UNIT_BOX, mat);
+  m.position.set(x, y, z);
+  m.scale.set(w, h, d);
+  m.castShadow = m.receiveShadow = true;
+  return m;
+};
+
+const flat = (geo, mat, y) => {
+  const m = new THREE.Mesh(geo, mat);
+  m.rotation.x = -Math.PI / 2;
+  m.position.y = y;
+  m.receiveShadow = true;
+  return m;
+};
+
+function terrain(g) {
+  const ground = flat(new THREE.PlaneGeometry(1600, 1600),
+    new THREE.MeshStandardMaterial({ color: 0x6f7758, roughness: 1 }), 0);
+  g.add(ground);
+}
+
+function water(g) {
+  // Build the river as a closed shape sampled along z, then lay it flat.
+  // Shape-space y maps to world -z, so points are pushed as (x, -z).
+  const shape = new THREE.Shape();
+  const zs = [];
+  for (let z = -700; z <= 700; z += 12) zs.push(z);
+  shape.moveTo(riverCentre(zs[0]) - RIVER_W / 2, -zs[0]);
+  for (const z of zs) shape.lineTo(riverCentre(z) - RIVER_W / 2, -z);
+  for (let i = zs.length - 1; i >= 0; i--) {
+    shape.lineTo(riverCentre(zs[i]) + RIVER_W / 2, -zs[i]);
+  }
+  shape.closePath();
+  const geo = new THREE.ShapeGeometry(shape);
+  geo.rotateX(-Math.PI / 2);
+  const river = new THREE.Mesh(geo, waterMat);
+  river.position.y = Y.river;
+  river.receiveShadow = true;
+  g.add(river);
+}
+
+function parkland(g, rand) {
+  const shape = new THREE.Shape();
+  shape.absellipse(PARK.x, -PARK.z, PARK.rx, PARK.rz, 0, Math.PI * 2);
+  const geo = new THREE.ShapeGeometry(shape, 48);
+  geo.rotateX(-Math.PI / 2);
+  const lawn = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x4a7a3c, roughness: 0.98 }));
+  lawn.position.y = Y.park;
+  lawn.receiveShadow = true;
+  g.add(lawn);
+
+  const pond = { x: PARK.x - 4, z: -18, r: 21 };
+  const pondMesh = flat(new THREE.CircleGeometry(pond.r, 40), waterMat, Y.pond);
+  pondMesh.position.x = pond.x; pondMesh.position.z = pond.z;
+  g.add(pondMesh);
+
+  // Gravel loop around the pond.
+  const path = flat(new THREE.RingGeometry(pond.r + 4, pond.r + 8, 48),
+    new THREE.MeshStandardMaterial({ color: 0xa89a80, roughness: 1 }), Y.park + 0.15);
+  path.position.x = pond.x; path.position.z = pond.z;
+  g.add(path);
+
+  for (let i = 0; i < 110; i++) {
+    const a = rand() * Math.PI * 2;
+    const r = Math.sqrt(rand()) * 0.94;
+    const x = PARK.x + Math.cos(a) * PARK.rx * r;
+    const z = PARK.z + Math.sin(a) * PARK.rz * r;
+    if (Math.hypot(x - pond.x, z - pond.z) < pond.r + 10) continue;   // keep the water clear
+
+    const trunk = new THREE.Mesh(TRUNK_GEO, trunkMat);
+    trunk.position.set(x, Y.park + 2.2, z);
+    trunk.castShadow = true;
+    g.add(trunk);
+
+    const conifer = rand() < 0.3;
+    const crown = new THREE.Mesh(conifer ? CONE_GEO : BLOB_GEO,
+      leafMats[(rand() * leafMats.length) | 0]);
+    const s = 0.8 + rand() * 0.7;
+    crown.scale.setScalar(s);
+    crown.position.set(x, Y.park + (conifer ? 8 : 6.5) * s, z);
+    crown.castShadow = true;
+    g.add(crown);
+  }
+}
+
+function streets(g) {
+  const halfX = colX(COLS - 1) + PITCH / 2;
+  const halfZ = rowZ(ROWS - 1) + PITCH / 2;
+
+  // One asphalt sheet under the whole downtown, blocks sit proud of it.
+  g.add(flat(new THREE.PlaneGeometry(halfX * 2, halfZ * 2), asphaltMat, Y.asphalt));
+
+  // Two arterial roads run right across the map and over the river.
+  for (const z of BRIDGE_Z) {
+    const road = flat(new THREE.PlaneGeometry(760, 9), asphaltMat, Y.asphalt - 0.05);
+    road.position.z = z;
+    g.add(road);
+  }
+
+  // Lane markings down every road corridor.
+  const paint = (len, horizontal, at) => {
+    const geo = new THREE.PlaneGeometry(len, 0.55);
+    const mat = laneMat.clone();
+    mat.map = laneMat.map.clone();
+    mat.map.needsUpdate = true;
+    mat.map.repeat.set(len / 12, 1);
+    mat.userData.temp = true;              // cloned per road — dispose on rebuild
+    const m = flat(geo, mat, Y.paint);
+    if (horizontal) m.position.z = at;
+    else { m.rotation.z = Math.PI / 2; m.position.x = at; }
+    g.add(m);
+  };
+  for (let i = 0; i < COLS - 1; i++) paint(halfZ * 2, false, colX(i) + PITCH / 2);
+  for (let j = 0; j < ROWS - 1; j++) paint(halfX * 2, true, rowZ(j) + PITCH / 2);
+
+  // Kerbed block platforms.
+  for (let i = 0; i < COLS; i++) {
+    for (let j = 0; j < ROWS; j++) {
+      g.add(box(kerbMat, colX(i), Y.kerbTop - 0.4, rowZ(j), BLOCK, 0.8, BLOCK));
+    }
+  }
+}
+
+function bridges(g) {
+  for (const z of BRIDGE_Z) {
+    const cx = riverCentre(z);
+    const deckY = 3.4, span = 74;
+
+    g.add(box(bridgeMat, cx, deckY, z, span, 1.1, 9.5));
+
+    // Ramps up from grade at both ends.
+    for (const dir of [-1, 1]) {
+      const ramp = box(bridgeMat, cx + dir * (span / 2 + 9), deckY / 2 + 0.2, z, 20, 1.1, 9.5);
+      ramp.rotation.z = dir * Math.atan2(deckY, 20);
+      g.add(ramp);
+    }
+    // Piers and railings.
+    for (const dx of [-13, 13]) g.add(box(bridgeMat, cx + dx, deckY / 2, z, 3.4, deckY, 9.5));
+    for (const dz of [-5, 5]) g.add(box(bridgeMat, cx, deckY + 1.2, z + dz, span, 1.2, 0.4));
+  }
+}
+
+function tower(g, x, z, w, d, h, rand) {
+  const glass = rand() < 0.42;
+  const pool = glass ? glassMats : concreteMats;
+  const mat = pool[(rand() * pool.length) | 0];
+
+  if (h > 30) {
+    // Podium, shaft, crown — reads as a real tower rather than a plain slab.
+    const podH = 6 + rand() * 5;
+    g.add(box(concreteMats[(rand() * concreteMats.length) | 0], x, Y.kerbTop + podH / 2, z, w, podH, d));
+
+    const sw = w * (0.62 + rand() * 0.16), sd = d * (0.62 + rand() * 0.16);
+    g.add(box(mat, x, Y.kerbTop + podH + h / 2, z, sw, h, sd));
+
+    const crownH = 3 + rand() * 7;
+    g.add(box(crownMat, x, Y.kerbTop + podH + h + crownH / 2, z, sw * 0.5, crownH, sd * 0.5));
+
+    if (rand() < 0.4) {
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.4, 12, 6), crownMat);
+      mast.position.set(x, Y.kerbTop + podH + h + crownH + 6, z);
+      mast.castShadow = true;
+      g.add(mast);
+    }
+  } else {
+    g.add(box(mat, x, Y.kerbTop + h / 2, z, w, h, d));
+    if (rand() < 0.35) {
+      g.add(box(crownMat, x, Y.kerbTop + h + 1, z, w * 0.4, 2, d * 0.4));  // rooftop plant
+    }
+  }
+}
+
+function downtown(g, rand) {
+  for (let i = 0; i < COLS; i++) {
+    for (let j = 0; j < ROWS; j++) {
+      const bx = colX(i), bz = rowZ(j);
+      const coreT = Math.max(0, 1 - Math.hypot(bx, bz) / CORE_R);   // 1 at centre
+      const t = Math.pow(coreT, 1.5);
+
+      // Near the core, one tower fills the block; out in the fringe the block
+      // splits into four smaller plots.
+      const single = rand() < 0.25 + t * 0.65;
+      const plots = single
+        ? [{ x: bx, z: bz, w: BLOCK - 2.5, d: BLOCK - 2.5, k: 1 }]
+        : [-1, 1].flatMap(sx => [-1, 1].map(sz => ({
+            x: bx + sx * BLOCK / 4, z: bz + sz * BLOCK / 4,
+            w: BLOCK / 2 - 1.6, d: BLOCK / 2 - 1.6, k: 0.5
+          })));
+
+      for (const p of plots) {
+        if (rand() < 0.07) continue;                                // vacant lot
+        const h = (4 + rand() * 6 + t * (12 + rand() * 52)) * p.k;
+        tower(g, p.x, p.z, p.w * (0.85 + rand() * 0.15), p.d * (0.85 + rand() * 0.15), h, rand);
+      }
+    }
+  }
+}
+
+function clouds(g, rand) {
+  const tex = cloudTexture();
+  for (let i = 0; i < 26; i++) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex, transparent: true, depthWrite: false,
+      opacity: 0.55 + rand() * 0.35
+    }));
+    s.position.set((rand() - 0.5) * 1700, 240 + rand() * 220, (rand() - 0.5) * 1700);
+    const w = 200 + rand() * 300;
+    s.scale.set(w, w * (0.35 + rand() * 0.2), 1);
+    g.add(s);
+  }
+}
+
+// ===== assemble =========================================================
+let city = new THREE.Group();
+
+function build(seed) {
+  scene.remove(city);
+  city.traverse(o => {
+    if (o.isMesh || o.isSprite) {
+      if (o.geometry && ![UNIT_BOX, TRUNK_GEO, BLOB_GEO, CONE_GEO].includes(o.geometry)) o.geometry.dispose();
+      if (o.material && (o.material.userData.temp || o.isSprite)) {
+        if (o.material.map) o.material.map.dispose();
+        o.material.dispose();
+      }
+    }
+  });
+
+  city = new THREE.Group();
+  const rand = rng(seed);
+  terrain(city);
+  streets(city);
+  water(city);
+  bridges(city);
+  parkland(city, rand);
+  downtown(city, rand);
+  clouds(city, rand);
+  scene.add(city);
+}
+
+let seed = 20260810;
+build(seed);
+
+addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') build(++seed);
+});
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+renderer.setAnimationLoop(() => {
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

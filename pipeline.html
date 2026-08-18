@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build pipelines — Blender scenes</title>
+<style>
+  :root {
+    --bg:#f7f7f5; --panel:#fff; --ink:#1b2028; --muted:#5c6470; --rule:#dcdcd6;
+    --env:#7a5cc4; --code:#2f6f9f; --data:#8a6d1f; --stage:#2f6f4f; --out:#a4552a; --view:#1b7f86;
+    --edge:#9aa3ae; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#0f1216; --panel:#171b21; --ink:#e8e9ea; --muted:#9aa3ae; --rule:#2a3039;
+      --env:#b49ae8; --code:#7cc0ea; --data:#e0c168; --stage:#7fd0a3; --out:#f0a06a; --view:#6fd6dc;
+      --edge:#5b6572;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0f1216; --panel:#171b21; --ink:#e8e9ea; --muted:#9aa3ae; --rule:#2a3039;
+    --env:#b49ae8; --code:#7cc0ea; --data:#e0c168; --stage:#7fd0a3; --out:#f0a06a; --view:#6fd6dc;
+    --edge:#5b6572;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  .wrap { max-width:1240px; margin:0 auto; padding:2.5rem 1.25rem 5rem; }
+  h1 { font-size:clamp(1.4rem,3.5vw,2rem); margin:0 0 .4rem; letter-spacing:-.02em; }
+  .sub { color:var(--muted); margin:0 0 1.1rem; max-width:70ch; }
+  a { color:var(--stage); }
+
+  nav.tabs { display:flex; gap:.5rem; flex-wrap:wrap; margin:0 0 1.1rem; }
+  nav.tabs button { font:600 13px/1 var(--mono); padding:.6rem .9rem; cursor:pointer;
+    border:1px solid var(--rule); border-radius:7px; background:var(--panel); color:var(--muted); }
+  nav.tabs button[aria-selected="true"] { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+  nav.tabs button:hover { color:var(--ink); }
+
+  .hint { display:inline-block; font-size:.85rem; color:var(--muted);
+    border:1px dashed var(--rule); border-radius:6px; padding:.4rem .65rem; margin-bottom:1.1rem; }
+  .legend { display:flex; flex-wrap:wrap; gap:.5rem 1rem; margin:0 0 1.25rem; font-size:.82rem; color:var(--muted); }
+  .legend span { display:inline-flex; align-items:center; gap:.4rem; }
+  .sw { width:11px; height:11px; border-radius:3px; display:inline-block; }
+
+  .board { overflow-x:auto; border:1px solid var(--rule); border-radius:12px; background:var(--panel); }
+  svg { display:block; min-width:1060px; }
+
+  .node rect { fill:var(--panel); stroke-width:1.6; rx:9; transition:filter .12s, stroke-width .12s; }
+  .node .lab { font:600 13.5px var(--mono); fill:var(--ink); }
+  .node .sub2 { font:11px var(--mono); fill:var(--muted); }
+  .node { cursor:help; outline:none; }
+  .node:hover rect, .node:focus-visible rect { stroke-width:3; filter:brightness(1.06); }
+  .node.has-src { cursor:pointer; }
+  .node .srctag { font:11px var(--mono); fill:var(--muted); opacity:.55; }
+  .node.has-src:hover .srctag, .node.has-src:focus-visible .srctag { opacity:1; fill:var(--ink); }
+
+  .edge { fill:none; stroke:var(--edge); stroke-width:1.7; marker-end:url(#arrow); }
+  .edge.dash { stroke-dasharray:5 4; }
+  .hit { fill:none; stroke:transparent; stroke-width:20; cursor:help; }
+  .hit:hover + .edge, .hit:focus-visible + .edge { stroke:var(--ink); stroke-width:3; }
+  .elab { font:10.5px var(--mono); fill:var(--muted); }
+
+  #tip { position:fixed; z-index:50; max-width:360px; pointer-events:none; opacity:0;
+    transition:opacity .1s; background:var(--panel); color:var(--ink); border:1px solid var(--rule);
+    border-radius:9px; padding:.7rem .8rem; box-shadow:0 8px 28px rgba(0,0,0,.28);
+    font-size:.86rem; line-height:1.5; }
+  #tip.on { opacity:1; }
+  #tip h3 { margin:0 0 .3rem; font:600 12px var(--mono); letter-spacing:.02em; }
+  #tip p { margin:0; color:var(--muted); }
+  #tip .kind { font:10px var(--mono); text-transform:uppercase; letter-spacing:.08em; opacity:.75; }
+
+  #panel { position:fixed; inset:0; z-index:60; display:none; background:rgba(10,12,15,.55); padding:3vh 1rem; }
+  #panel.on { display:flex; justify-content:center; align-items:flex-start; }
+  .sheet { background:var(--panel); border:1px solid var(--rule); border-radius:12px;
+    width:min(980px,100%); max-height:94vh; display:flex; flex-direction:column;
+    box-shadow:0 24px 60px rgba(0,0,0,.4); overflow:hidden; }
+  .sheet header { display:flex; align-items:center; gap:.75rem; padding:.7rem .9rem;
+    border-bottom:1px solid var(--rule); flex:none; }
+  .sheet header code { font:12.5px var(--mono); color:var(--code); }
+  .sheet header .spacer { flex:1; }
+  .sheet header a { font-size:.8rem; color:var(--muted); text-decoration:none; }
+  #p-close { font:inherit; border:1px solid var(--rule); background:transparent; color:var(--ink);
+    border-radius:5px; padding:.2rem .5rem; cursor:pointer; line-height:1; }
+  #p-note:not(:empty) { padding:.6rem .9rem; font-size:.82rem; color:var(--muted);
+    border-bottom:1px solid var(--rule); background:rgba(127,127,127,.06); }
+  #p-note code { font:11.5px var(--mono); color:var(--out); }
+  #p-code { margin:0; padding:.6rem 0 1rem; overflow:auto; flex:1; }
+  #p-code .row { display:flex; font:12.5px/1.55 var(--mono); white-space:pre; }
+  #p-code .ln { color:var(--muted); opacity:.6; padding:0 .9rem 0 .6rem; user-select:none; flex:none; }
+  #p-code .src { flex:1; padding-right:1rem; }
+  #p-code .row.hit { background:rgba(127,180,140,.18); }
+  #p-code .row.hit .ln { opacity:1; color:var(--stage); font-weight:600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>How each scene gets built</h1>
+  <p class="sub" id="tagline"></p>
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+
+  <div class="hint">
+    <b>Hover</b> any box or arrow for an explanation, including what goes wrong there.
+    <b>Click</b> a box marked <span style="font-family:var(--mono)">‹›</span> to read the code behind it.
+    Keyboard: <span style="font-family:var(--mono)">Tab</span> / <span style="font-family:var(--mono)">Enter</span> / <span style="font-family:var(--mono)">Esc</span>.
+  </div>
+
+  <div class="legend">
+    <span><i class="sw" style="background:var(--env)"></i>environment</span>
+    <span><i class="sw" style="background:var(--code)"></i>entry / contract</span>
+    <span><i class="sw" style="background:var(--stage)"></i>build stage</span>
+    <span><i class="sw" style="background:var(--data)"></i>data produced</span>
+    <span><i class="sw" style="background:var(--out)"></i>output file</span>
+    <span><i class="sw" style="background:var(--view)"></i>how you view it</span>
+  </div>
+
+  <div class="board"><svg id="svg" role="img" aria-label="Build pipeline diagram"></svg></div>
+</div>
+
+<div id="tip" role="tooltip"><span class="kind"></span><h3></h3><p></p></div>
+<div id="panel" aria-hidden="true">
+  <div class="sheet" role="dialog" aria-label="Source code">
+    <header>
+      <code id="p-path"></code><span class="spacer"></span>
+      <a id="p-raw" href="#" target="_blank" rel="noopener">open raw ↗</a>
+      <button id="p-close" aria-label="Close">✕</button>
+    </header>
+    <div id="p-note"></div>
+    <pre id="p-code"></pre>
+  </div>
+</div>
+
+<script src="demos.js"></script>
+<script>
+const KIND = {env:'--env', code:'--code', data:'--data', stage:'--stage', out:'--out', view:'--view'};
+const KINDNAME = {env:'environment', code:'entry / contract', data:'data produced',
+                  stage:'build stage', out:'output file', view:'how you view it'};
+const SVGNS = 'http://www.w3.org/2000/svg';
+const svg = document.getElementById('svg');
+const el = (n, a = {}) => { const e = document.createElementNS(SVGNS, n);
+  for (const k in a) e.setAttribute(k, a[k]); return e; };
+
+function route(a, b) {
+  const acx = a.x + a.w / 2, bcx = b.x + b.w / 2;
+  if (b.y > a.y + a.h - 1) {
+    const y1 = a.y + a.h, y2 = b.y;
+    if (Math.abs(acx - bcx) < 2) return { d:`M${acx},${y1} L${bcx},${y2}`, mx:acx, my:(y1+y2)/2 };
+    const my = y1 + (y2 - y1) / 2;
+    return { d:`M${acx},${y1} L${acx},${my} L${bcx},${my} L${bcx},${y2}`, mx:(acx+bcx)/2, my };
+  }
+  const ltr = bcx > acx;
+  const x1 = ltr ? a.x + a.w : a.x, x2 = ltr ? b.x : b.x + b.w;
+  const cy = a.y + a.h / 2, cy2 = b.y + b.h / 2;
+  if (Math.abs(cy - cy2) < 2) return { d:`M${x1},${cy} L${x2},${cy2}`, mx:(x1+x2)/2, my:cy };
+  const mx = (x1 + x2) / 2;
+  return { d:`M${x1},${cy} L${mx},${cy} L${mx},${cy2} L${x2},${cy2}`, mx, my:(cy+cy2)/2 };
+}
+
+function draw(pipeline) {
+  const N = pipeline.nodes, E = pipeline.edges;
+  const byId = Object.fromEntries(N.map(n => [n.id, n]));
+  const maxY = Math.max(...N.map(n => n.y + n.h)) + 40;
+  const W = 1060;
+  svg.setAttribute('viewBox', `0 0 ${W} ${maxY}`);
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', maxY);
+  svg.innerHTML = `<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+    markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker></defs>`;
+
+  const gE = el('g'), gN = el('g');
+  svg.append(gE, gN);
+
+  for (const e of E) {
+    const a = byId[e.a], b = byId[e.b];
+    if (!a || !b) { console.warn('bad edge', e); continue; }
+    const r = route(a, b);
+    const hit = el('path', { class:'hit', d:r.d, tabindex:'0', role:'img',
+      'aria-label': (e.t || '') + '. ' + (e.d || '') });
+    const vis = el('path', { class:'edge' + (e.dash ? ' dash' : ''), d:r.d });
+    hit.dataset.t = e.t || (a.lab + ' → ' + b.lab);
+    hit.dataset.d = e.d || '';
+    hit.dataset.k = 'connection';
+    gE.append(hit, vis);
+    if (e.l) {
+      const tx = el('text', { class:'elab', x:r.mx, y:r.my - 5, 'text-anchor':'middle' });
+      tx.textContent = e.l;
+      gE.append(tx);
+    }
+  }
+
+  for (const n of N) {
+    const g = el('g', { class:'node', tabindex:'0', role:'img',
+      'aria-label': (n.t || n.lab) + '. ' + (n.d || '') });
+    g.append(el('rect', { x:n.x, y:n.y, width:n.w, height:n.h, stroke:`var(${KIND[n.kind]})` }));
+    const t1 = el('text', { class:'lab', x:n.x + 14, y:n.y + (n.sub ? 27 : n.h / 2 + 5) });
+    t1.textContent = n.lab;
+    g.append(t1);
+    if (n.sub) {
+      const t2 = el('text', { class:'sub2', x:n.x + 14, y:n.y + 46 });
+      t2.textContent = n.sub;
+      g.append(t2);
+    }
+    g.dataset.t = n.t || n.lab;
+    g.dataset.d = n.d || '';
+    g.dataset.k = KINDNAME[n.kind];
+    if (n.src) {
+      g.classList.add('has-src');
+      const tag = el('text', { class:'srctag', x:n.x + n.w - 12, y:n.y + 16, 'text-anchor':'end' });
+      tag.textContent = '‹›';
+      g.append(tag);
+      g.addEventListener('click', () => openSource(n.src[0], n.src[1]));
+      g.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openSource(n.src[0], n.src[1]); }
+      });
+    }
+    gN.append(g);
+  }
+  wireTips();
+}
+
+// ---- tooltip --------------------------------------------------------------
+const tip = document.getElementById('tip');
+const tK = tip.querySelector('.kind'), tH = tip.querySelector('h3'), tP = tip.querySelector('p');
+function show(ev, node) {
+  tK.textContent = node.dataset.k || '';
+  tH.textContent = node.dataset.t || '';
+  tP.textContent = node.dataset.d || '';
+  tip.classList.add('on');
+  place(ev);
+}
+function place(ev) {
+  const pad = 14, r = tip.getBoundingClientRect();
+  let x = (ev.clientX ?? innerWidth / 2) + pad, y = (ev.clientY ?? innerHeight / 2) + pad;
+  if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - pad;
+  if (y + r.height > innerHeight - 8) y = ev.clientY - r.height - pad;
+  tip.style.left = Math.max(8, x) + 'px';
+  tip.style.top = Math.max(8, y) + 'px';
+}
+const hide = () => tip.classList.remove('on');
+
+function wireTips() {
+  for (const t of svg.querySelectorAll('.node, .hit')) {
+    t.addEventListener('mouseenter', e => show(e, t));
+    t.addEventListener('mousemove', place);
+    t.addEventListener('mouseleave', hide);
+    t.addEventListener('focus', () => {
+      const b = t.getBoundingClientRect();
+      show({ clientX:b.left + b.width / 2, clientY:b.bottom }, t);
+    });
+    t.addEventListener('blur', hide);
+  }
+}
+
+// ---- source panel ---------------------------------------------------------
+const panel = document.getElementById('panel');
+const pPath = document.getElementById('p-path'), pCode = document.getElementById('p-code');
+const pRaw = document.getElementById('p-raw'), pNote = document.getElementById('p-note');
+const esc = s => s.replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c]));
+
+async function openSource(path, sym) {
+  hide();
+  panel.classList.add('on');
+  panel.setAttribute('aria-hidden', 'false');
+  pPath.textContent = path;
+  pRaw.href = path;
+  pNote.textContent = '';
+  pCode.textContent = 'loading…';
+  let text;
+  try {
+    const res = await fetch(path);
+    if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+    text = await res.text();
+  } catch (err) {
+    pCode.textContent = '';
+    pNote.innerHTML = 'Could not read <code>' + path + '</code> — ' + err.message +
+      '.<br>Over <code>file://</code> browsers block this fetch; serve the folder ' +
+      '(<code>python3 -m http.server 8731</code>) or use “open raw”.';
+    return;
+  }
+  const lines = text.split('\n');
+  let hitLine = lines.findIndex(l => l.includes(sym));
+  if (hitLine < 0) {
+    hitLine = 0;
+    pNote.innerHTML = 'Could not find <code>' + esc(sym) + '</code> in this file — showing the top ' +
+      'instead. The symbol was probably renamed.';
+  }
+  const from = Math.max(0, hitLine - 6), to = Math.min(lines.length, hitLine + 46);
+  pCode.innerHTML = '';
+  for (let i = from; i < to; i++) {
+    const row = document.createElement('div');
+    row.className = 'row' + (i === hitLine ? ' hit' : '');
+    const num = document.createElement('span');
+    num.className = 'ln';
+    num.textContent = String(i + 1).padStart(4, ' ');
+    const code = document.createElement('span');
+    code.className = 'src';
+    code.textContent = lines[i] || ' ';
+    row.append(num, code);
+    pCode.append(row);
+  }
+  const target = pCode.querySelector('.row.hit');
+  if (target) target.scrollIntoView({ block:'center' });
+}
+function closePanel() { panel.classList.remove('on'); panel.setAttribute('aria-hidden', 'true'); }
+document.getElementById('p-close').addEventListener('click', closePanel);
+addEventListener('keydown', e => { if (e.key === 'Escape') { hide(); closePanel(); } });
+panel.addEventListener('click', e => { if (e.target === panel) closePanel(); });
+
+// ---- tabs -----------------------------------------------------------------
+const tabs = document.getElementById('tabs'), tagline = document.getElementById('tagline');
+function select(id) {
+  const demo = window.DEMOS.find(d => d.id === id) || window.DEMOS[0];
+  for (const b of tabs.children) b.setAttribute('aria-selected', String(b.dataset.id === demo.id));
+  tagline.textContent = demo.tagline;
+  draw(demo.pipeline);
+  if (location.hash.slice(1) !== demo.id) history.replaceState(null, '', '#' + demo.id);
+}
+for (const d of window.DEMOS) {
+  const b = document.createElement('button');
+  b.textContent = d.title;
+  b.dataset.id = d.id;
+  b.setAttribute('role', 'tab');
+  b.onclick = () => select(d.id);
+  tabs.append(b);
+}
+select(location.hash.slice(1) || window.DEMOS[0].id);
+addEventListener('hashchange', () => select(location.hash.slice(1)));
+</script>
+</body>
+</html>
