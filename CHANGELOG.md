@@ -1,5 +1,90 @@
 # Changelog
 
+## 2026-08-11 — voxel cabin demo, multi-demo web pages
+
+### Completed
+
+- **Interactive glTF viewer for the Blender city.** Added `--export-gltf`, and
+  a three.js page that loads the exported scene with orbit/zoom/pan and a
+  day/night switch. This answered a fair criticism: four PNGs are a downgrade
+  from an orbitable scene, and that trade-off had been made silently.
+- **Pipeline diagram** (`pipeline.html`) — every node and edge carries a hover
+  explanation, and clicking a node opens the code behind it. Links resolve by
+  searching the file for a symbol rather than by stored line number, so they do
+  not rot as source moves.
+- **Second demo: a cosy spruce cabin at dusk**, Minecraft-style, generated
+  procedurally. Approved after checking that the suggested toolchain was
+  unavailable: no Minecraft installed, no Mineways/Chunky, and MCprep's whole
+  job is converting Minecraft's texture atlas, which we do not have.
+  - Phase 1 voxel contract + **greedy mesher**: hidden-face culling then
+    coplanar merging. 164,027 solid blocks / 984,162 naive faces → **7,953
+    quads, 123.7×**, meshed in 3.4 s.
+  - Five stage modules: terrain (heightmap, meandering river at one flat water
+    level, clearing, path), cabin (log frame, gabled roof, glass, hearth,
+    campfire), scatter (161 spruce with placement rules), materials (14
+    procedural graphs, zero image files), lighting (sky, bounded fog, real
+    lights at emissive blocks).
+  - Reuses `city/render.py` and `city/camera.py` unchanged — Metal detection,
+    OpenImageDenoise, AgX and the compositor all inherited.
+- **Generalised all three web pages to N demos** via a shared registry
+  (`demos.js`). Adding a scene is now one entry, not three parallel edits.
+  `gallery.html`, `pipeline.html` and `viewer.html` each render a tab per demo
+  with `#hash` deep links; `blender_city.html` became a redirect.
+- **GUI support for both scenes** — launching with a UI opens straight into a
+  Rendered viewport through the scene camera, live Cycles on the GPU.
+- `docs/LESSONS.md` plus four agent-memory files capturing what to do and not
+  do in future sessions.
+
+### Failed Approaches
+
+- **Background agent dispatch, 9 failures out of 10.** Usually stalled with
+  zero output ("no progress for 600s"); in the worst round all four agents
+  failed before even creating their worktrees. One was killed mid-stream by an
+  API error. Parallel agents on disjoint files remains the right decomposition
+  — merges were conflict-free whenever agents actually ran — but the delivery
+  is unreliable here. The five cabin modules were written directly instead.
+- **Instructing agents to poll-and-sleep for a tool still downloading.** The
+  `sleep` itself tripped the no-progress watchdog. Sequence the dependency
+  first; agents cannot usefully wait.
+- **A World volume for the atmosphere** (again, in the cabin scene's design
+  space) — documented rather than repeated, since the city build had already
+  measured 0.00033 mean pixel against 0.968.
+- **`export_apply=True` alone for glTF.** Evaluates the Geometry Nodes modifier
+  but leaves the output as instances, which the exporter silently drops — the
+  city exported with **zero trees** while reporting success. `export_gn_mesh=True`
+  realises them (192 → 359 nodes, exactly +167).
+- **Trusting a render's exit code.** Every rendering bug this session exited 0
+  with a plausible file: a 50 KB fully-transparent PNG, two independent
+  black-frame causes, and a night preset that was four lit rectangles floating
+  in black.
+
+### Accuracy / Metrics
+
+- Cabin: 95,911 solid blocks → 16,104 quads; `interior_air=236` (hollow,
+  asserted); `roof_patched=0`; 5 point lights matched to 5 emissive blocks;
+  161 spruce with all placement rules enforced.
+- Render times on Metal (M2 Max, 38 GPU cores): city 4–6 s, cabin 4–10 s at
+  1280×720 / 96–128 samples.
+- Web registry validated: 55 source links all resolve to a real file containing
+  their symbol; 12 referenced assets exist; both pipeline graphs have zero
+  dangling edge endpoints (city 28 nodes/27 edges, cabin 27/25).
+
+### Known Limitations
+
+- **The cabin's interactive view is markedly flatter than its stills** — the
+  scene's concept is emissive light *illuminating* things, which a rasteriser
+  cannot do. The campfire glows but warms nothing. The Blender GUI is the only
+  route that is both interactive and path traced.
+- Turntable animation is implemented in both pipelines but has never been run
+  to completion.
+- Glare/bloom is wired but untuned per preset.
+- The two cities are not identical building-for-building (Python PRNG vs the
+  JS `mulberry32` stream); same rules, different draw.
+- Window emission covers tall towers only, so city fringe blocks stay dark at
+  night.
+- No remote repository — everything remains local-only, so nothing is pushed
+  or backed up off this machine.
+
 ## 2026-08-10 (later) — Blender rebuild
 
 ### Completed

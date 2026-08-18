@@ -1,86 +1,77 @@
-# CURRENT_WORK — richard (3D city scene)
+# CURRENT_WORK — richard (procedural scenes)
 
-**Last session:** 2026-08-10
+**Last session:** 2026-08-11 (ended 2026-08-18)
 **Repo:** `/Users/johngavin/docs_gh/proj/richard` — local git only, **no remote**
-**Branch:** `main` · **HEAD:** `ef3b14f`
+**Worktree:** `~/docs_gh/worktrees/richard/feat/cc-20260810-170618`
+**Branch:** `feat/cc-20260810-170618` · **16 commits ahead of `main`, unmerged**
 
 ---
 
 ## Where things stand
 
-A working three.js city scene exists and is committed. The next task —
-**install Blender and rebuild the scene there, jazzed up** — was started and
-interrupted before anything was installed.
+Two finished, verified demos plus a generalised web layer. Working tree clean.
 
 ### Done
 
-- `buildings.html` — self-contained three.js scene: CBD on a 5×7 block grid,
-  meandering river west with two bridges, park east with pond and 110 trees,
-  street grid with dashed lane markings, atmospheric sky, cloud billboards.
-  Seeded PRNG; `r` reseeds.
-- `vendor/` — three.js r180 vendored (4 files, 2.7 MB). Page runs fully
-  offline from `file://`. See `vendor/README.md` for source URLs and refresh
-  procedure.
-- Opens at `file:///Users/johngavin/docs_gh/proj/richard/buildings.html`
+- **Blender 5.2.0 installed via Nix and pinned.** `shell.nix` resolves to the
+  exact store path already built; `nix-build --dry-run` fetches 2.62 MiB and no
+  Blender. GC root at `.nix-gcroot-blender` (gitignored) protects the 851 MiB
+  closure from `nix-collect-garbage`.
+- **Cycles Metal GPU confirmed** — `Apple M2 Max (GPU - 38 cores)`. This was the
+  main open risk and it resolved favourably.
+- **Demo 1 — procedural city** (`blender/city/`, `blender/build_city.py`):
+  84 plots → 121 objects, 167 Geometry Nodes instances, four presets, 4–6 s
+  per frame.
+- **Demo 2 — voxel spruce cabin** (`blender/cabin/`, `blender/build_cabin.py`):
+  greedy mesher at **123.7×** reduction, 161 spruce, four presets, 4–10 s.
+  Reuses the city's `render.py`/`camera.py` unchanged.
+- **Web layer generalised to N demos** via `demos.js`. `gallery.html`,
+  `pipeline.html`, `viewer.html` each render a tab per demo with `#hash` deep
+  links. Adding a demo is one registry entry.
+- `docs/BLENDER.md`, `docs/LESSONS.md`, and four agent-memory files.
 
-### NOT done — resume here
+### Not done — pick up here
 
-**Blender is not installed.** The last action was `brew info --cask blender`,
-which the user interrupted. Nothing was downloaded or installed.
-
-Next step: install Blender (`brew install --cask blender`, ~1–2 GB), then
-write a `bpy` script that rebuilds the same city plan and shows off what
-Blender does that three.js cannot.
+1. **Nothing is pushed.** No remote exists. If this work should survive the
+   machine, create one and push the branch.
+2. **The branch is unmerged.** 16 commits on `feat/cc-20260810-170618`.
+3. Turntable animation implemented in both pipelines, never run end-to-end.
+4. Glare/bloom wired but untuned per preset.
+5. A third demo would exercise whether the `demos.js` generalisation actually
+   holds — that was its whole point and it has only been tested at N=2.
 
 ---
 
-## Verified environment facts (do not re-derive)
+## How to run things
+
+```bash
+# serve the pages (needed — file:// blocks .glb and source fetches)
+python3 -m http.server 8731
+#   http://127.0.0.1:8731/gallery.html#cabin
+#   http://127.0.0.1:8731/pipeline.html#cabin
+#   http://127.0.0.1:8731/viewer.html#cabin
+
+# render
+BL=/nix/store/dcga32d59a06hjwvfi1lxzp55v43wah1-blender-5.2.0/Applications/Blender.app/Contents/MacOS/Blender
+$BL --background --python blender/build_cabin.py -- --preset dusk
+$BL --background --python blender/build_city.py  -- --preset noon
+
+# interactive + path traced (the only route that is both)
+$BL --python blender/build_cabin.py -- --preset dusk --no-render
+```
+
+---
+
+## Verified facts (do not re-derive)
 
 | Fact | Value |
 |---|---|
-| Machine | MacBook Pro, Apple M2 Max (Mac14,6) |
-| CPU / GPU | 12 cores (8P + 4E) / 38-core GPU, Metal 4 |
-| Memory | 32 GB unified |
-| Disk | **43 GB free of 926 GB (95% full)** — the binding constraint |
-| Browser | **WebGL is dead in Chrome and Brave** (GPU process fails to start). **Use Edge** — confirmed working |
-
-### Research settled this session
-
-- **Karma XPU does NOT support Apple Silicon GPU.** Houdini 22.0 docs:
-  *"Karma XPU currently only supports CPU and NVIDIA GPU hardware"*;
-  *"Machines without an NVIDIA GPU (e.g. Apple Silicon) will only make use of
-  the Embree CPU device."* A web summary claiming a Metal backend exists is
-  contradicted by the official docs.
-  https://www.sidefx.com/docs/houdini/solaris/karma_xpu.html
-- **OpenCL sims DO work** on Apple Silicon (OpenCL 3.0; M1-era Pyro compile
-  errors fixed in build 19.5.551). FLIP has a "Use GPU" toggle, device index 0.
-- Houdini current version is **22.0**. SideFX no longer publishes prices on
-  the buy page — the `~$269/yr` Indie figure quoted earlier is **unverified**.
-- **Decision: Blender over Houdini** — Cycles uses the 38-core GPU via Metal,
-  Karma would not. Free, ~4 GB vs ~10 GB.
-
----
-
-## Disk state
-
-Emptied `~/.Trash` (137 items, 58 GB) — verified 0 bytes. **`df` did not
-change**: 24 APFS local Time Machine snapshots still reference those blocks,
-so the space is *purgeable*, not free. It surfaces automatically under disk
-pressure, or immediately via
-`tmutil thinlocalsnapshots / 60000000000 4` (deletes local snapshots; external
-Time Machine backups unaffected). **Not run — needs user say-so.**
-
-Reclaim options the user declined for now:
-
-| Action | Frees | Risk |
-|---|---|---|
-| Model caches (lm-studio, whisper, solana, ollama, nomic.ai) | ~27 GB | None — re-downloadable |
-| `nix-collect-garbage -d` | 20–40 GB (unconfirmed) | None — rebuildable |
-| `~/Downloads/flicks/downloading/` stalled `.!qB` partials | ~10 GB | Low |
-| `*_old` dirs (`.pyenv_old`, `venv311_old`, `scikit_learn_data_old`) | ~9 GB | Low |
-
-`~/Downloads/100GOPRO/` (62 GB) is **personal irreplaceable footage — archive,
-never delete.** `~/Downloads/flicks/` (94 GB) is media; user's call.
+| Blender | 5.2.0 LTS, nixpkgs, store path `dcga32d59a06…` |
+| Cycles device | `METAL`, Apple M2 Max, 38 GPU cores |
+| View transform | AgX (default; dynamic enum reports `['NONE']`) |
+| Disk | ~32 GB free — the binding constraint |
+| Browser | **WebGL is dead in Chrome and Brave** on this machine. Use Edge |
+| Machine | M2 Max, 12 CPU cores, 32 GB unified |
 
 ---
 
@@ -88,30 +79,13 @@ never delete.** `~/Downloads/flicks/` (94 GB) is media; user's call.
 
 | Tried | Outcome |
 |---|---|
-| three.js from unpkg CDN only | Works, but offline-fragile. Fixed by vendoring into `vendor/` |
-| Opening the scene in Chrome / Brave | Blank screen — WebGL context creation fails, GPU process disabled. Not a code bug. Use Edge |
-| `nix-collect-garbage --dry-run` in a non-interactive shell | Returned nothing — `nix` not on PATH there (session banner reports `nix:MISSING`). Re-run inside the Nix shell |
-| Emptying Trash to free space | Trash is empty but `df` unchanged — APFS snapshots hold the blocks |
+| Background `Agent` dispatch | **9 failures / 10.** Stalls with zero output; sometimes before creating a worktree. Write the code directly after two failures |
+| Telling agents to poll/sleep for a pending tool | The sleep trips the 600 s watchdog. Sequence dependencies instead |
+| World volume for atmosphere/fog | Renders pure black — unbounded optical depth. Use a bounded domain box |
+| Compositor group fed from `NodeGroupInput` | Empty image, alpha 0. Source from `CompositorNodeRLayers` |
+| `export_apply=True` alone for glTF | Silently exports zero Geometry Nodes instances. Add `export_gn_mesh=True` |
+| Gating on `bl_rna` enum contents | Dynamic enums report `['NONE']`; stranded the render on CPU. Attempt the assignment, catch `TypeError` |
+| Pinning nixpkgs to the registry tarball | Resolved to a *different* store path — would have re-downloaded 851 MiB. `<nixpkgs>` here is a flakehub weekly tree |
+| Judging a render by exit code or file size | Every bug this session exited 0 with a plausible file. Sample pixel values and look at the image |
 
----
-
-## Plan for the Blender scene
-
-Replicate the `buildings.html` layout, then use Blender-specific capability
-that three.js cannot match:
-
-- **Geometry Nodes** for procedural block/tower generation and tree scatter
-  (rather than hand-placed instances)
-- **Cycles + Metal GPU** path tracing — real GI, soft shadows, caustics on water
-- **Nishita sky** with physically-based sun angle
-- **Volumetric atmosphere** for god rays between towers
-- **Emissive window grids** for a dusk/night variant
-- **Real glass BSDF** on tower facades with roughness variation
-- **Depth of field** for a tilt-shift miniature look
-- **Turntable animation** rendered to video
-- Optional: **glTF export** back into `buildings.html` for a higher-quality
-  interactive web scene
-
-Keep the same layout constants as the three.js version so the two stay
-comparable: 5×7 blocks, 24-unit pitch, 16-unit footprints, river west, park
-east, arterials at z = −12 and z = 36.
+See `docs/LESSONS.md` for the full write-up.
