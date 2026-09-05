@@ -37,6 +37,32 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Sky } from 'three/addons/objects/Sky.js';
 
+// A crashed module script (most commonly: no WebGL context available in this
+// browser) previously left the page silently blank — nothing rendered, no
+// error, "reset" wired to nothing because the code that attaches it never
+// ran. Wrap the whole scene in try/catch so any failure surfaces a visible,
+// actionable message instead of silence.
+function showFatalError(err) {
+  console.error(err);
+  document.body.innerHTML =
+    '<div style="position:fixed;inset:0;display:flex;align-items:center;' +
+    'justify-content:center;background:#1d2733;color:#fff;' +
+    'font:15px/1.5 -apple-system,BlinkMacSystemFont,sans-serif;padding:24px;' +
+    'text-align:center;">' +
+    '<div style="max-width:440px;">' +
+    '<h2 style="margin:0 0 8px;">Can’t render this scene</h2>' +
+    '<p style="margin:0 0 8px;color:#c7d0da;">Your browser reports no WebGL ' +
+    'context is available (or scene setup failed). Try a different browser ' +
+    '— Chrome, Edge or Firefox with hardware acceleration enabled — ' +
+    'or check <code>chrome://gpu</code> / <code>edge://gpu</code> for a ' +
+    'disabled GPU process.</p>' +
+    '<p style="font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;' +
+    'color:#8a97a6;">' + ((err && err.message) || String(err)) + '</p>' +
+    '</div></div>';
+}
+
+try {
+
 // ===== layout constants ==================================================
 // The whole plan is driven by these — change PITCH/COLS/ROWS and the roads,
 // blocks, bridges and highways all stay consistent.
@@ -452,6 +478,10 @@ renderer.setAnimationLoop(() => {
   controls.update();
   renderer.render(scene, camera);
 });
+
+} catch (err) {
+  showFatalError(err);
+}
 </script>
 </body>
 </html>

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Procedural scenes — Blender + three.js</title>
+<style>
+  :root {
+    --bg:#f6f6f4; --panel:#fff; --ink:#1b2028; --muted:#5c6470; --rule:#dcdcd6;
+    --accent:#2f6f4f; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#0f1216; --panel:#171b21; --ink:#e8e9ea; --muted:#9aa3ae; --rule:#2a3039; --accent:#7fd0a3;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0f1216; --panel:#171b21; --ink:#e8e9ea; --muted:#9aa3ae; --rule:#2a3039; --accent:#7fd0a3;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+         padding:0 0 5rem; }
+  .wrap { max-width:1180px; margin:0 auto; padding:0 1.25rem; }
+  header { border-bottom:1px solid var(--rule); padding:2.5rem 0 1.25rem; margin-bottom:2rem; }
+  h1 { font-size:clamp(1.5rem,4vw,2.2rem); margin:0 0 .4rem; letter-spacing:-.02em; }
+  .sub { color:var(--muted); margin:0 0 1rem; max-width:66ch; }
+  a { color:var(--accent); }
+  code { font:13px var(--mono); color:var(--accent); }
+
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:1.1rem; margin:0 0 2.5rem; }
+  .card { display:block; background:var(--panel); border:1px solid var(--rule); border-radius:10px;
+          padding:1.25rem 1.35rem; text-decoration:none; color:var(--ink); transition:border-color .12s; }
+  .card:hover { border-color:var(--accent); }
+  .card .kicker { font:600 11px/1 var(--mono); color:var(--accent); text-transform:uppercase;
+                  letter-spacing:.08em; margin-bottom:.55rem; display:block; }
+  .card h2 { font-size:1.05rem; margin:0 0 .4rem; }
+  .card p { margin:0; color:var(--muted); font-size:.92rem; }
+
+  h3 { font-size:.85rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);
+       margin:0 0 .9rem; font-weight:600; }
+  footer { color:var(--muted); font-size:.88rem; border-top:1px solid var(--rule); padding-top:1.25rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Procedural scenes</h1>
+    <p class="sub">
+      Two scenes — a CBD city and a spruce cabin at dusk — each generated
+      entirely from code and built twice over: once as an interactive
+      three.js scene, once path traced in Blender's Cycles. No image
+      textures, no downloaded models, anywhere in this repository.
+    </p>
+  </header>
+
+  <h3>Start here</h3>
+  <div class="grid">
+    <a class="card" href="gallery.html">
+      <span class="kicker">Renders</span>
+      <h2>Gallery</h2>
+      <p>Path-traced stills for both scenes, four presets each, with notes on
+         what Cycles buys over a browser rasteriser.</p>
+    </a>
+    <a class="card" href="viewer.html">
+      <span class="kicker">Interactive</span>
+      <h2>Viewer</h2>
+      <p>The exported glTF scenes, live in three.js — orbit, zoom, day/night
+         toggle. Light transport left behind; interactivity gained.</p>
+    </a>
+    <a class="card" href="pipeline.html">
+      <span class="kicker">How it's built</span>
+      <h2>Pipeline</h2>
+      <p>A hoverable diagram of each build, from layout constants through
+         Geometry Nodes to render output — click through to the source.</p>
+    </a>
+  </div>
+
+  <h3>Original three.js builds</h3>
+  <div class="grid">
+    <a class="card" href="buildings.html">
+      <span class="kicker">Procedural city</span>
+      <h2>buildings.html</h2>
+      <p>The standalone three.js city scene this project started from — CBD,
+         river, park, streets — before the Blender/Cycles rebuild.</p>
+    </a>
+    <a class="card" href="blender_city.html">
+      <span class="kicker">Rebuild comparison</span>
+      <h2>blender_city.html</h2>
+      <p>The same city plan, rebuilt to match the Blender/Cycles version's
+         layout constants for a direct renderer-vs-renderer comparison.</p>
+    </a>
+  </div>
+
+  <footer>
+    Source: <a href="https://github.com/JohnGavin/procedural-scenes">github.com/JohnGavin/procedural-scenes</a>
+    · viewer/buildings pages need WebGL — if a scene shows nothing, try a
+    different browser with hardware acceleration enabled.
+  </footer>
+</div>
+</body>
+</html>
