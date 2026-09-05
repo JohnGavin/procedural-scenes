@@ -1,5 +1,11 @@
 .DS_Store
-renders/
+# Regenerable Blender scratch/intermediate files stay ignored; the PNG/glb
+# outputs are the actual site assets gallery.html/viewer.html serve and are
+# committed on the publish branch so GH Pages can serve them (a viewer's
+# browser cannot run Blender to regenerate them).
+renders/*
+!renders/*.png
+!renders/*.glb
 *.blend1
 __pycache__/
 *.pyc
